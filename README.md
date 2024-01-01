@@ -15,7 +15,8 @@ Gestural MIDI BLE Glove
 - Gesture recognition using TinyML / TensorFlow Lite: https://wiki.seeedstudio.com/XIAO-BLE-Sense-TFLite-Getting-Started/
 
 
-INSTALLATION NOTES:
+INSTALLATION NOTES
+
 To get TinyML running on the XIAO Sense, Seeed says to follow these steps:
 
 Step 1. Use this Google Colab script:
