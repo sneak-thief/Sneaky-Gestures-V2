@@ -1,4 +1,4 @@
-Gestural MIDI BLE Glove
+# Gestural MIDI BLE Glove
 
 - Based on Seeed XIAO nRF52840 Sense: https://www.seeedstudio.com/Seeed-XIAO-BLE-Sense-nRF52840-p-5253.html (compatible with other nRF52840 boards) 
 - X,Y,Z Accelerometers send MIDI CC
@@ -15,7 +15,7 @@ Gestural MIDI BLE Glove
 - Gesture recognition using TinyML / TensorFlow Lite: https://wiki.seeedstudio.com/XIAO-BLE-Sense-TFLite-Getting-Started/
 
 
-INSTALLATION NOTES
+# INSTALLATION NOTES
 
 To get TinyML running on the XIAO Sense, Seeed says to follow these steps:
 
