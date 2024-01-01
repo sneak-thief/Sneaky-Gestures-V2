@@ -25,7 +25,6 @@ https://colab.research.google.com/github/arduino/ArduinoTensorFlowLiteTutorials/
 
 Since you will want to use your own gestures, sample your gesture output as per Seeed's instructions using the IMU_Capture.ino program, upload the .csv files to the Colab files tab and modify the gesture list accordingly:
 
-# the list of gestures 
 GESTURES = [
     "punch",
     "flex"
