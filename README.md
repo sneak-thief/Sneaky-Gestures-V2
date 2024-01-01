@@ -43,6 +43,8 @@ SOLUTION
 !pip install pandas numpy matplotlib==3.1.2
 !pip install tensorflow==2.8.0rc0
 
+Using these libraries should allow the script to complete and generate a file called model.h - download this file and replace the one included in this repo.  
+
 Step 2. Download their latest fork of TensorFlow Lite:
 https://github.com/lakshanthad/tflite-micro-arduino-examples 
 
