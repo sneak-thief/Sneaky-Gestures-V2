@@ -19,9 +19,11 @@ INSTALLATION NOTES:
 To get TinyML running on the XIAO Sense, Seeed says to follow these steps:
 
 Step 1. Use this Google Colab script:
+
 https://colab.research.google.com/github/arduino/ArduinoTensorFlowLiteTutorials/blob/master/GestureToEmoji/arduino_tinyml_workshop.ipynb
 
-PROBLEM 
+PROBLEM
+
 -the current libraries (as of 01.01.2024) cause the error:
 "ValueError: x has 714 columns but y has 2 columns"
 
@@ -35,6 +37,7 @@ Step 2. Download their latest fork of TensorFlow Lite:
 https://github.com/lakshanthad/tflite-micro-arduino-examples 
 
 PROBLEM
+
 - The latest library doesn't work with the Arduino 2.2.1 
 
 SOLUTION 
