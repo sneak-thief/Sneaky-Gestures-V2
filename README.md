@@ -54,8 +54,10 @@ PROBLEM
 
 - The latest library doesn't work with the Arduino 2.2.1 
 
-SOLUTION 
--Delete the following unecessary folder and its contents:
+SOLUTION
+
+- Delete the following unecessary folder and its contents:
+
 libraries\Arduino_TensorFlowLite\src\test_over_serial 
 
 
