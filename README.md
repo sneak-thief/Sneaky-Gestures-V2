@@ -10,4 +10,11 @@ Gestural MIDI BLE Glove
 - FSR on thumb tip for note-on velocity and aftertouch
 - flex resistor on index finger for MIDI CC, etc.
 - LED strip with 7x SK6812
-- Powered by a LiPo battery (400mAh)    
+- Powered by a LiPo battery (400mAh)
+
+- Gesture recognition using TinyML / TensorFlow Lite: https://wiki.seeedstudio.com/XIAO-BLE-Sense-TFLite-Getting-Started/
+  Note: Google colab script requires this modification to run:
+  !pip install pandas numpy matplotlib==3.1.2
+  !pip install tensorflow==2.8.0rc0
+
+
