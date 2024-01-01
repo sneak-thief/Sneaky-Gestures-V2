@@ -19,7 +19,7 @@
 
 To get TinyML running on the XIAO Sense, Seeed says to follow these steps:
 
-Step 1. Use this Google Colab script:
+**Step 1. Use this Google Colab script:**
 
 https://colab.research.google.com/github/arduino/ArduinoTensorFlowLiteTutorials/blob/master/GestureToEmoji/arduino_tinyml_workshop.ipynb
 
@@ -32,12 +32,13 @@ GESTURES = [
 
 (replace punch and flex with the file names of your uploaded gesture recordings)
 
-PROBLEM
+_PROBLEM_
 
 - the current libraries (as of 01.01.2024) cause the error:
 "ValueError: x has 714 columns but y has 2 columns"
 
-SOLUTION
+_SOLUTION_
+
 - specify these older library versions:
 
 !pip install pandas numpy matplotlib==3.1.2
@@ -46,15 +47,15 @@ SOLUTION
 
 Using these libraries should allow the script to complete and generate a file called model.h - download this file and replace the one included in this repo.  
 
-Step 2. Download their latest fork of TensorFlow Lite:
+**Step 2. Download their latest fork of TensorFlow Lite:**
 
 https://github.com/lakshanthad/tflite-micro-arduino-examples 
 
-PROBLEM
+_PROBLEM_
 
 - The latest library doesn't work with the Arduino 2.2.1 
 
-SOLUTION
+_SOLUTION_
 
 - Delete the following unecessary folder and its contents:
 
