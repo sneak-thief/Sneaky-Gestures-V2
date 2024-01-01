@@ -25,7 +25,7 @@ https://colab.research.google.com/github/arduino/ArduinoTensorFlowLiteTutorials/
 
 PROBLEM
 
--the current libraries (as of 01.01.2024) cause the error:
+- the current libraries (as of 01.01.2024) cause the error:
 "ValueError: x has 714 columns but y has 2 columns"
 
 SOLUTION
