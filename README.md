@@ -23,6 +23,16 @@ Step 1. Use this Google Colab script:
 
 https://colab.research.google.com/github/arduino/ArduinoTensorFlowLiteTutorials/blob/master/GestureToEmoji/arduino_tinyml_workshop.ipynb
 
+Since you will want to use your own gestures, sample your gesture output as per Seeed's instructions using the IMU_Capture.ino program, upload the .csv files to the Colab files tab and modify the gesture list accordingly:
+
+# the list of gestures 
+GESTURES = [
+    "punch",
+    "flex"
+]
+
+(replace punch and flex with the file names of your uploaded gesture recordings)
+
 PROBLEM
 
 - the current libraries (as of 01.01.2024) cause the error:
