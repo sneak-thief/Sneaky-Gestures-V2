@@ -9,6 +9,8 @@
 | Flex sensor 3" / 78 mm | 1 | Index finger bend |
 | LiPo battery, 3.7 V 400 mAh | 1 | 602626 or 602525 |
 | 5 V boost regulator | 1 | Small PCB format (powers the LED strip) |
+| Adafruit 1167   | 1 | Knit Conductive Fabric with silver |
+
 
 ## Schematics
 
