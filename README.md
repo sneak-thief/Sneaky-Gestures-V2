@@ -42,6 +42,7 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 | IMU             | Onboard                          | LSM6DS3 (Sense board), I²C 0x6A   |
 | Battery         | LiPo, JST connector              | `PIN_VBAT` monitor                |
 | Boost Converter | Underneath the SK6812            | 5V regulator for the SK6812       |
+| Silver Fabric   | 16 finger contact pads           | 16 channel pins of CD74HC4067     |
 
 Bill of Materials and schematics: [README.md](hardware/README.md)
  
