@@ -112,11 +112,16 @@ Documented in detail:
 │   ├── DebugSerial.h         debug-print macros
 │   └── TempoPitchShifter.{h,cpp}  inlined pitch-bend math library
 ├── hardware/
+│   ├── README.md                               Bill of Materials
 │   ├── Sneaky-Gestures-V2-Schematic_V1.0.png   Schematics V1 (png)
 │   └── Sneaky-Gestures-V2-Schematic_V1.0.pdf   Schematics V1 (pdf)
-├── platformio.ini
-├── LED_Mode_Reference.html   illustrated LED reference
-├── glove_layout.html         labelled glove diagram
-├── glove_user_guide.html     user guide
+├── lib/Lightweight-CD74HC4067-Arduino-main
+│   ├── README.md                  Lightweight 4067 mux/demux library 
+│   └── light_CD74HC4067.{h,cpp}   Lightweight 4067 mux/demux library 
+├── documentation/
+│   ├── README.md                 user guide
+|   └── LED_Mode_Reference.html   illustrated LED reference
+├── platformio.ini            platformio setup
 └── README.md                 this file
+
 ```
