@@ -14,5 +14,5 @@
 
 | File | Description |
 |------|-------------|
-| [`Sneaky-Gestures-V2-Schematic_V1.0.png`](V2-Schematic_V1.0.png) | Schematics V1 (PNG) |
-| [`Sneaky-Gestures-V2-Schematic_V1.0.pdf`](V2-Schematic_V1.0.pdf) | Schematics V1 (PDF) |
+| [`Sneaky-Gestures-V2-Schematic_V1.0.png`](Sneaky-Gestures-V2-Schematic_V1.0.png) | Schematics V1 (PNG) |
+| [`Sneaky-Gestures-V2-Schematic_V1.0.pdf`](Sneaky-Gestures-V2-Schematic_V1.0.pdf) | Schematics V1 (PDF) |
