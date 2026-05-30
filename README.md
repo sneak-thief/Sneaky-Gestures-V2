@@ -52,7 +52,7 @@ meaning — notes ripple outward from the played knuckle, the flex bar fills as
 the finger bends, octave/spread/scale flash brief indicators, and the tap-tempo
 and preset-browser modes each host several sub-views with their own LED layouts.
 
-The full visual reference is in [`led_modes.html`](./documentation/LED_Mode_Reference.html).
+The full visual reference is in [LED_Mode_Reference.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/LED_Mode_Reference.html)
 
 ## Build
 
@@ -99,9 +99,8 @@ All declared in `platformio.ini`:
 
 Documented in detail: 
 
-Glove layout [`/glove_layout.html`](./documentation/glove_layout.html)
-User guide [`/glove_user_guide.html`](./documentation/glove_user_guide.html)
-LED display [`/LED_Mode_Reference.html`](./documentation/LED_Mode_Reference.html)
+- User guide [glove_user_guide.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/glove_user_guide.html)
+- LED display [LED_Mode_Reference.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/LED_Mode_Reference.html)
 
 ## Repository layout
 
