@@ -43,8 +43,8 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 | Battery         | LiPo, JST connector              | `PIN_VBAT` monitor                |
 | Boost Converter | Underneath the SK6812            | 5V regulator for the SK6812       |
 
-See `glove_layout.html` for a labelled diagram of pad and channel positions.
-
+Bill of Materials and schematics: [README.md](hardware/README.md)
+ 
 ## LED display
 
 The strip is the only on-device feedback. Each mode repaints it with a distinct
