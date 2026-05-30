@@ -4,7 +4,7 @@ A wearable Bluetooth MIDI instrument. You play notes by touching your thumb to
 conductive pads on your fingers, and shape the sound by bending your index
 finger, pressing with your thumb, and tilting your hand. A 7-LED strip on the
 back of the hand shows you what's going on — see the
-**[LED reference guide](led_modes.html)** for the full visual legend.
+**[LED reference guide](LED_Mode_Reference.html)** for the full visual legend.
 
 ---
 
@@ -148,7 +148,7 @@ the strip flashes a band of color to confirm the load.
 | Solid blue on first LED + green LEDs     | Charging                                 |
 
 For the full breakdown of every LED state — exact colors, animations, and what
-each display means in each mode — see the **[LED reference guide](led_modes.html)**.
+each display means in each mode — see the **[LED reference guide](LED_Mode_Reference.html)**.
 
 ---
 
