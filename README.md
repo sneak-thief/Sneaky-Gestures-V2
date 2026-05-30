@@ -99,7 +99,7 @@ All declared in `platformio.ini`:
 
 Documented in detail: 
 
-- User guide [glove_user_guide.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/glove_user_guide.html)
+- User guide [README.md](documentation/README.md)
 - LED display [LED_Mode_Reference.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/LED_Mode_Reference.html)
 
 ## Repository layout
