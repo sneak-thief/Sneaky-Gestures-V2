@@ -1,0 +1,18 @@
+## Bill of Materials
+
+| Component | Qty | Notes |
+|-----------|:---:|-------|
+| Seeed XIAO nRF52840 Sense | 1 | MCU · BLE-MIDI · onboard LSM6DS3 IMU |
+| SK6812 RGBW LED | 7 | Addressable strip (NEO_GRBW), mounted on back of hand |
+| CD74HC4067 breakout PCB | 1 | 16-channel analog multiplexer |
+| FSR 0.3" | 1 | Force-sensitive resistor (thumb / aftertouch) |
+| Flex sensor 3" / 78 mm | 1 | Index finger bend |
+| LiPo battery, 3.7 V 400 mAh | 1 | 602626 or 602525 |
+| 5 V boost regulator | 1 | Small PCB format (powers the LED strip) |
+
+## Schematics
+
+| File | Description |
+|------|-------------|
+| [`Sneaky-Gestures-V2-Schematic_V1.0.png`](V2-Schematic_V1.0.png) | Schematics V1 (PNG) |
+| [`Sneaky-Gestures-V2-Schematic_V1.0.pdf`](V2-Schematic_V1.0.pdf) | Schematics V1 (PDF) |
