@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LED Mode Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#141414;        /* titles + key text */
+    --body:#4a4a4a;       /* running body copy   */
+    --mute:#8c8c8c;       /* labels + captions    */
+    --paper:#ffffff;
+    --rule:#141414;       /* structural rules     */
+    --hair:#e4e4e4;       /* hairlines in content */
+    --grey:#8c8c8c;       /* alias → mute         */
+    --faint:#e4e4e4;      /* alias → hair         */
+    --off:#1c1c1c;        /* unlit LED            */
+    --gap: clamp(20px, 4vw, 56px);
+  }
+  *{box-sizing:border-box;}
+  html{ -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Open Sans", sans-serif;
+    font-weight:400;
+    line-height:1.45;
+  }
+
+  .wrap{
+    max-width:1120px;
+    margin:0 auto;
+    padding: clamp(28px,5vw,72px) clamp(20px,5vw,64px) 120px;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    border-top:6px solid var(--ink);
+    padding-top:18px;
+    display:grid;
+    grid-template-columns: 1fr auto;
+    gap:24px;
+    align-items:end;
+    margin-bottom: clamp(40px,7vw,88px);
+  }
+  .masthead h1{
+    font-weight:800;
+    font-size: clamp(34px, 7vw, 72px);
+    letter-spacing:-0.02em;
+    line-height:0.98;
+    margin:0;
+    text-transform:uppercase;
+  }
+  .masthead h1 span{ display:block; }
+  .masthead .meta{
+    text-align:right;
+    font-size:12px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--grey);
+    font-weight:600;
+    line-height:1.7;
+  }
+  .lede{
+    grid-column:1 / -1;
+    margin-top:26px;
+    max-width:62ch;
+    font-size: clamp(14px,1.5vw,16px);
+    font-weight:300;
+    color:var(--body);
+  }
+  .lede strong{ font-weight:700; color:var(--ink); }
+
+  .index{
+    grid-column:1 / -1;
+    margin-top:34px;
+    border-top:1px solid var(--faint);
+    padding-top:18px;
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px,1fr));
+    gap:6px 24px;
+    font-size:12px;
+    letter-spacing:0.04em;
+  }
+  .index a{
+    color:var(--ink); text-decoration:none;
+    display:flex; gap:10px; padding:5px 0;
+    border-bottom:1px solid transparent;
+    font-weight:600;
+  }
+  .index a:hover{ border-bottom-color:var(--ink); color:var(--ink); }
+  .index a:hover b{ color:var(--ink); }
+  .index a b{ color:var(--mute); font-weight:700; font-variant-numeric:tabular-nums; }
+
+  /* ---------- section ---------- */
+  .mode{
+    display:grid;
+    grid-template-columns: 0.9fr 1.6fr;
+    gap: var(--gap);
+    padding: clamp(38px,5vw,64px) 0;
+    border-top:1px solid var(--rule);
+    align-items:start;
+    position:relative;
+  }
+  /* heavy tab on the hairline — section rhythm without a heavy full rule */
+  .mode::before{
+    content:"";
+    position:absolute; top:-1px; left:0;
+    width:54px; height:4px; background:var(--ink);
+  }
+  .mode:last-of-type{ border-bottom:1px solid var(--rule); }
+
+  .mode__head .num{
+    font-size:11px; font-weight:700; letter-spacing:0.2em;
+    color:var(--mute); text-transform:uppercase;
+    display:block; margin-bottom:16px;
+    font-variant-numeric:tabular-nums;
+  }
+  .mode__head h2{
+    margin:0 0 4px;
+    font-weight:700;
+    font-size: clamp(22px,2.6vw,30px);
+    letter-spacing:-0.01em;
+    line-height:1.04;
+    text-transform:uppercase;
+    color:var(--ink);
+  }
+  .mode__head .enter{
+    font-size:12.5px; color:var(--grey); font-weight:600;
+    letter-spacing:0.02em; margin-top:12px; line-height:1.6;
+  }
+  .mode__head .enter b{ color:var(--ink); font-weight:700; }
+  .mode__head p{
+    font-size:13.5px; font-weight:300; color:var(--body);
+    margin:16px 0 0; max-width:36ch;
+  }
+
+  .mode__body{ display:flex; flex-direction:column; gap:30px; }
+
+  /* ---------- LED strip diagram ---------- */
+  .strip-block{ display:flex; flex-direction:column; gap:0; }
+  .strip-caption{
+    font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--grey); font-weight:700; margin-bottom:14px;
+    display:flex; justify-content:space-between; align-items:baseline;
+  }
+  .strip-caption .state{ color:var(--ink); letter-spacing:0.02em; }
+
+  .strip{
+    display:grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: clamp(8px,1.4vw,16px);
+  }
+  .led{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+  }
+  /* 1px black outline around every LED, lit or unlit */
+  .dot{
+    width:100%; aspect-ratio:1/1; border-radius:50%;
+    background:var(--off);
+    border:1px solid #000;
+    position:relative;
+    max-width:64px;
+  }
+  .dot.lit{
+    background: var(--c);
+    box-shadow: 0 0 18px -2px var(--c);
+  }
+  .dot .w{
+    position:absolute; inset:30%; border-radius:50%;
+    background:#ffffff; opacity:0;
+  }
+  .dot.w-on .w{ opacity:0.92; box-shadow:0 0 10px 1px #fff; }
+  .dot.w-dim .w{ opacity:0.45; }
+  .dot.blink{ animation: blink 1s steps(1,end) infinite; }
+  @keyframes blink{ 50%{ background:var(--off); box-shadow:none; } }
+
+  .led .idx{
+    font-size:12px; font-weight:700; color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .led .fn{
+    font-size:10.5px; font-weight:600; color:var(--grey);
+    text-align:center; line-height:1.3; letter-spacing:0.01em;
+    min-height:2.2em;
+  }
+  .led.active .fn{ color:var(--ink); }
+
+  .rail{
+    display:flex; justify-content:space-between;
+    font-size:10px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--grey); font-weight:700;
+    border-top:1px solid var(--faint); margin-top:16px; padding-top:8px;
+  }
+
+  .subhead{
+    font-size:11px; letter-spacing:0.16em; text-transform:uppercase;
+    color:var(--ink); font-weight:700; margin:8px 0 14px;
+    padding-top:18px; border-top:1px solid var(--hair);
+  }
+
+  /* ---------- states table ---------- */
+  .states{ width:100%; border-collapse:collapse; }
+  .states caption{
+    text-align:left; font-size:11px; letter-spacing:0.16em;
+    text-transform:uppercase; color:var(--grey); font-weight:700;
+    padding-bottom:10px;
+  }
+  .states th, .states td{
+    text-align:left; padding:8px 10px 8px 0;
+    border-bottom:1px solid var(--faint);
+    font-size:12.5px; vertical-align:top;
+  }
+  .states th{ font-weight:700; color:var(--ink); white-space:nowrap; }
+  .states td{ font-weight:300; color:var(--body); }
+  .states td b{ font-weight:600; color:var(--ink); }
+  .swatch{
+    display:inline-block; width:11px; height:11px; border-radius:50%;
+    margin-right:7px; vertical-align:-1px; border:1px solid #000;
+  }
+  .ctrl{
+    font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums;
+    white-space:nowrap;
+  }
+  .keyline{ display:flex; flex-wrap:wrap; gap:6px 18px; font-size:11.5px; color:var(--body); font-weight:600; }
+  .keyline span{ display:inline-flex; align-items:center; }
+
+  footer{
+    margin-top:80px; border-top:6px solid var(--ink); padding-top:16px;
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px;
+    font-size:11px; letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--grey); font-weight:600;
+  }
+
+  @media (max-width:760px){
+    .mode{ grid-template-columns:1fr; gap:30px; }
+    .masthead{ grid-template-columns:1fr; }
+    .masthead .meta{ text-align:left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ====================== MASTHEAD ====================== -->
+  <header class="masthead">
+    <h1><span>LED</span><span>Mode</span><span>Reference</span></h1>
+    <div class="meta">
+      7-Segment Indicator<br>
+      Glove MIDI Controller<br>
+      Rev. — Opus build<br>
+      Sheet 01 / 01
+    </div>
+    <p class="lede">
+      The strip carries <strong>seven RGBW LEDs</strong>, numbered <strong>6 → 0</strong> in
+      physical order: <strong>LED 6 at the pinky end</strong>, <strong>LED 0 at the index end</strong>.
+      Each mode repaints the strip with a distinct meaning. Every mode below is drawn at a
+      representative state; unlit segments are dark, lit segments in their true colour, each
+      ringed by a 1px outline. The <strong>W</strong> (white) channel, where used, shows as an
+      inner white core.
+    </p>
+
+    <nav class="index">
+      <a href="#play"><b>01</b> Note Play</a>
+      <a href="#flex"><b>02</b> Flex Bar</a>
+      <a href="#octave"><b>03</b> Octave Shift</a>
+      <a href="#spread"><b>04</b> Note Spread</a>
+      <a href="#scale"><b>05</b> Scale Select</a>
+      <a href="#tap"><b>06</b> Tap Tempo + Sub-menus</a>
+      <a href="#preset"><b>07</b> Preset Browser + Sub-menus</a>
+      <a href="#battery"><b>08</b> Battery Level</a>
+    </nav>
+  </header>
+
+  <!-- ====================== 01 NOTE PLAY ====================== -->
+  <section class="mode" id="play">
+    <div class="mode__head">
+      <span class="num">01 — Default</span>
+      <h2>Note Play</h2>
+      <div class="enter">ALWAYS ACTIVE<br>when no other mode owns the strip</div>
+      <p>Touching a finger pad lights its knuckle LED red with a faint white core. On release
+         the LED crossfades to the note’s ripple colour then fades out, while a colour ripple
+         radiates outward.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Example — middle-finger note held</span><span class="state">SOURCE = LED 2</span></div>
+        <div class="strip">
+          <div class="led"><div class="dot lit" style="--c:#007fff;opacity:.30"></div><div class="idx">6</div><div class="fn">ripple tail</div></div>
+          <div class="led"><div class="dot lit" style="--c:#007fff;opacity:.45"></div><div class="idx">5</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot lit" style="--c:#007fff;opacity:.6"></div><div class="idx">4</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot lit" style="--c:#007fff;opacity:.8"></div><div class="idx">3</div><div class="fn">ripple</div></div>
+          <div class="led active"><div class="dot lit w-on" style="--c:#ff0000"><span class="w"></span></div><div class="idx">2</div><div class="fn">SOURCE knuckle — red + white core</div></div>
+          <div class="led"><div class="dot lit" style="--c:#007fff;opacity:.8"></div><div class="idx">1</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot lit" style="--c:#007fff;opacity:.6"></div><div class="idx">0</div><div class="fn">ripple</div></div>
+        </div>
+        <div class="rail"><span>LED 6 · Pinky end</span><span>Index end · LED 0</span></div>
+      </div>
+      <table class="states">
+        <caption>Behaviour</caption>
+        <tr><th>Held</th><td>Source knuckle LED <b>red</b> (R255) with a dim <b>white core</b> (W50).</td></tr>
+        <tr><th>Ripple</th><td>Note-related colours radiate outward from the source LED, fading in over ~200 ms.</td></tr>
+        <tr><th>Release</th><td>Source LED crossfades to the note-related colour then to black.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====================== 02 FLEX BAR ====================== -->
+  <section class="mode" id="flex">
+    <div class="mode__head">
+      <span class="num">02 — While held</span>
+      <h2>Flex Bar</h2>
+      <div class="enter">ENTER<br>hold index modal (ch 2)</div>
+      <p>A gradient bar tracks finger bend, filling from LED 0 toward LED 6 — orange through
+         cyan to red. Each flex note that fires pulses a white core across the lit LEDs.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Example — partial bend, note pulse</span><span class="state">FILL FROM LED 0</span></div>
+        <div class="strip">
+          <div class="led"><div class="dot"></div><div class="idx">6</div><div class="fn">full bend</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">5</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#9a96aa"><span class="w"></span></div><div class="idx">4</div><div class="fn">wavefront + W pulse</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#00ffff"><span class="w"></span></div><div class="idx">3</div><div class="fn">cyan</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#55c4aa"><span class="w"></span></div><div class="idx">2</div><div class="fn">interp</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#aa8a55"><span class="w"></span></div><div class="idx">1</div><div class="fn">interp</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#ff5000"><span class="w"></span></div><div class="idx">0</div><div class="fn">orange · first to light</div></div>
+        </div>
+        <div class="rail"><span>LED 6 · max bend</span><span>Flat · LED 0</span></div>
+      </div>
+      <table class="states">
+        <caption>Gradient — LED 0 (flat) to LED 6 (full bend)</caption>
+        <tr><th><span class="swatch" style="background:#ff5000"></span>LED 0</th><td>Orange — first to light as the finger bends.</td></tr>
+        <tr><th><span class="swatch" style="background:#00ffff"></span>LED 3</th><td>Cyan — mid bend.</td></tr>
+        <tr><th><span class="swatch" style="background:#ff0000"></span>LED 6</th><td>Red — maximum bend.</td></tr>
+        <tr><th>White core</th><td>Pulses across lit LEDs each time a quantized flex note fires.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====================== 03 OCTAVE ====================== -->
+  <section class="mode" id="octave">
+    <div class="mode__head">
+      <span class="num">03 — Indicator · 700 ms</span>
+      <h2>Octave Shift</h2>
+      <div class="enter">SHOWN ON<br>octave-up / octave-down press</div>
+      <p>Centred on a yellow LED 3. Range ±3 octaves: each step down lights one red LED toward
+         the pinky; each step up lights one green LED toward the index.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Example — +2 octaves</span><span class="state">CENTRE = LED 3</span></div>
+        <div class="strip">
+          <div class="led"><div class="dot"></div><div class="idx">6</div><div class="fn">−3 oct</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">5</div><div class="fn">−2 oct</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">4</div><div class="fn">−1 oct</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ffd400"></div><div class="idx">3</div><div class="fn">CENTRE · 0</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00d12a"></div><div class="idx">2</div><div class="fn">+1 oct</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00d12a"></div><div class="idx">1</div><div class="fn">+2 oct</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">+3 oct</div></div>
+        </div>
+        <div class="rail"><span>Down — red →</span><span>← green — Up</span></div>
+      </div>
+      <table class="states">
+        <caption>Reading the strip</caption>
+        <tr><th><span class="swatch" style="background:#ffd400"></span>LED 3 yellow</th><td>Always lit — the no-shift reference point.</td></tr>
+        <tr><th><span class="swatch" style="background:#00d12a"></span>LEDs 2·1·0 green</th><td>Octaves <b>up</b> (+1, +2, +3) growing toward the index.</td></tr>
+        <tr><th><span class="swatch" style="background:#ff0000"></span>LEDs 4·5·6 red</th><td>Octaves <b>down</b> (−1, −2, −3) growing toward the pinky.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====================== 04 SPREAD ====================== -->
+  <section class="mode" id="spread">
+    <div class="mode__head">
+      <span class="num">04 — Indicator · 700 ms</span>
+      <h2>Note Spread</h2>
+      <div class="enter">SHOWN ON<br>pinky-palm quick tap</div>
+      <p>A single cyan LED marks the current spread value 1–4. The lit position steps two LEDs
+         per value, from LED 6 down to LED 0.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Example — spread 3</span><span class="state">CYAN MARKER</span></div>
+        <div class="strip">
+          <div class="led"><div class="dot"></div><div class="idx">6</div><div class="fn">spread 1</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">5</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">4</div><div class="fn">spread 2</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">3</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ffff"></div><div class="idx">2</div><div class="fn">spread 3</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">1</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">spread 4</div></div>
+        </div>
+        <div class="rail"><span>LED 6 · Pinky end</span><span>Index end · LED 0</span></div>
+      </div>
+      <table class="states">
+        <caption>Marker position</caption>
+        <tr><th class="ctrl">Spread 1</th><td><span class="swatch" style="background:#00ffff"></span>LED 6</td></tr>
+        <tr><th class="ctrl">Spread 2</th><td><span class="swatch" style="background:#00ffff"></span>LED 4</td></tr>
+        <tr><th class="ctrl">Spread 3</th><td><span class="swatch" style="background:#00ffff"></span>LED 2</td></tr>
+        <tr><th class="ctrl">Spread 4</th><td><span class="swatch" style="background:#00ffff"></span>LED 0</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====================== 05 SCALE SELECT ====================== -->
+  <section class="mode" id="scale">
+    <div class="mode__head">
+      <span class="num">05 — Latched mode</span>
+      <h2>Scale Select</h2>
+      <div class="enter">ENTER / EXIT<br>pinky-palm 1 s hold · auto-exit 3 s idle</div>
+      <p>While active the scale indicator stays lit (no 700 ms fade) and all note LED animation
+         is suppressed — notes still sound for auditioning. ch3 / ch6 scroll through 20 scales,
+         shown as a filling bar in three colour bands. Auto-exits after 3 s with no scroll.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Example — yellow band, 3 LEDs (scale 9)</span><span class="state">FILL FROM LED 6</span></div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#ffd400"></div><div class="idx">6</div><div class="fn">fill 1</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ffd400"></div><div class="idx">5</div><div class="fn">fill 2</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ffd400"></div><div class="idx">4</div><div class="fn">fill 3</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">3</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">2</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">1</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">—</div></div>
+        </div>
+        <div class="rail"><span>LED 6 · fills first</span><span>LED 0 · fills last</span></div>
+      </div>
+      <table class="states">
+        <caption>Colour bands — length = scale index within band</caption>
+        <tr><th><span class="swatch" style="background:#ff0000"></span>Red</th><td>Scales <b>0–6</b> — 1 LED (scale 0 = no quantization) up to 7 LEDs.</td></tr>
+        <tr><th><span class="swatch" style="background:#ffd400"></span>Yellow</th><td>Scales <b>7–13</b> — 1 LED up to 7 LEDs.</td></tr>
+        <tr><th><span class="swatch" style="background:#007fff"></span>Blue</th><td>Scales <b>14–19</b> — 1 LED up to 6 LEDs.</td></tr>
+        <tr><th class="ctrl">ch3 / ch6</th><td>Scroll scale up / down. Each press refreshes the 3 s auto-exit timer.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- ====================== 06 TAP TEMPO + SUB-MENUS ====================== -->
+  <section class="mode" id="tap">
+    <div class="mode__head">
+      <span class="num">06 — Top priority</span>
+      <h2>Tap Tempo<br>+ Sub-menus</h2>
+      <div class="enter">ENTER<br>hold octave-up</div>
+      <p>LED 3 blinks the beat and ripples outward each onset — white in key-transpose mode,
+         blue in root-transpose mode. The menu also hosts tempo nudge, a CC-swap toggle, and a
+         flex-range editor. Works even when locked to incoming MIDI clock (tap capture disabled,
+         menu still reachable).</p>
+    </div>
+    <div class="mode__body">
+
+      <div class="strip-block">
+        <div class="strip-caption"><span>Default — beat blink + ripple</span><span class="state">LED 3 = BEAT</span></div>
+        <div class="strip">
+          <div class="led"><div class="dot"></div><div class="idx">6</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot lit" style="--c:#808080;box-shadow:none"></div><div class="idx">5</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot lit" style="--c:#cccccc;box-shadow:none"></div><div class="idx">4</div><div class="fn">ripple</div></div>
+          <div class="led active"><div class="dot lit blink" style="--c:#ffffff"></div><div class="idx">3</div><div class="fn">BEAT blink / tap flash</div></div>
+          <div class="led"><div class="dot lit" style="--c:#cccccc;box-shadow:none"></div><div class="idx">2</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot lit" style="--c:#808080;box-shadow:none"></div><div class="idx">1</div><div class="fn">ripple</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">ripple</div></div>
+        </div>
+        <div class="rail"><span>Ripple ⟵</span><span>⟶ Ripple</span></div>
+      </div>
+
+      <table class="states">
+        <caption>Menu controls (notes suppressed on these channels)</caption>
+        <tr><th class="ctrl">ch3 / ch6</th><td><b>Key transpose</b> +/− (±5 semitones). LED 3 solid white; blink + ripple off while engaged.</td></tr>
+        <tr><th class="ctrl">ch9 / ch12</th><td><b>Root transpose</b> +/− (±5, mode rotation). LED 3 solid blue while engaged.</td></tr>
+        <tr><th class="ctrl">ch5 / ch8</th><td><b>Tempo</b> +1 / −1 BPM (shows tempo readout).</td></tr>
+        <tr><th class="ctrl">ch4</th><td><b>CC swap</b> toggle (CC74 ↔ CC1 axes).</td></tr>
+        <tr><th class="ctrl">ch5 hold 1 s</th><td>Toggle the <b>flex-range editor</b>.</td></tr>
+      </table>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — Transpose (key +2, white)</div>
+        <div class="strip">
+          <div class="led"><div class="dot"></div><div class="idx">6</div><div class="fn">−3</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">5</div><div class="fn">−2</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">4</div><div class="fn">−1</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ffffff"></div><div class="idx">3</div><div class="fn">mode · solid</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#a000ff"></div><div class="idx">2</div><div class="fn">+1</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#a000ff"></div><div class="idx">1</div><div class="fn">+2</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">+3</div></div>
+        </div>
+        <div class="rail"><span>Down · 4·5·6</span><span>2·1·0 · Up</span></div>
+      </div>
+      <table class="states">
+        <caption>Transpose sides — LED 3 = mode colour (white key / blue root)</caption>
+        <tr><th>Up · LEDs 2·1·0</th><td><span class="swatch" style="background:#a000ff"></span>purple = +1…+3 &nbsp; <span class="swatch" style="background:#00ffff"></span>cyan = +4…+5</td></tr>
+        <tr><th>Down · LEDs 4·5·6</th><td><span class="swatch" style="background:#ffd400"></span>yellow = −1…−3 &nbsp; <span class="swatch" style="background:#ff5000"></span>orange = −4…−5</td></tr>
+      </table>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — Tempo readout (example 109 BPM)</div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit w-on" style="--c:#ffffff"><span class="w" style="background:#ffffff"></span></div><div class="idx">6</div><div class="fn">ones · full</div></div>
+          <div class="led active"><div class="dot lit w-on" style="--c:#ffffff"><span class="w" style="background:#ffffff"></span></div><div class="idx">5</div><div class="fn">full</div></div>
+          <div class="led active"><div class="dot lit w-on" style="--c:#ffffff"><span class="w" style="background:#ffffff"></span></div><div class="idx">4</div><div class="fn">full</div></div>
+          <div class="led active"><div class="dot lit w-on" style="--c:#ffffff"><span class="w" style="background:#ffffff"></span></div><div class="idx">3</div><div class="fn">full</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#cccccc"><span class="w" style="background:#cccccc"></span></div><div class="idx">2</div><div class="fn">half (≈9)</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ffd400"></div><div class="idx">1</div><div class="fn">decade · yellow</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">—</div></div>
+        </div>
+        <div class="rail"><span>Ones · LEDs 6→2 (W)</span><span>Decade · 1 & 0</span></div>
+      </div>
+      <table class="states">
+        <caption>Tempo encoding (ch5 / ch8 nudge)</caption>
+        <tr><th>Ones 1–10</th><td>LEDs 6→2 on the <b>W</b> channel: full = 2 steps, ~1/10-bright = 1 step. e.g. 9 = LEDs 6·5·4·3 full + LED 2 dim.</td></tr>
+        <tr><th>Decade</th><td>Colour on LED 1 (+ LED 0 for the upper half of each 20-BPM band): purple, pink, blue, cyan, green, yellow, orange, red.</td></tr>
+      </table>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — CC swap (ch4, swapped = gradient)</div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#00c8b4"></div><div class="idx">6</div><div class="fn">turquoise</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#22a8bf"></div><div class="idx">5</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#4488ca"></div><div class="idx">4</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#6668d5"></div><div class="idx">3</div><div class="fn">gradient</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#8848e0"></div><div class="idx">2</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#aa28ec"></div><div class="idx">1</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#a000ff"></div><div class="idx">0</div><div class="fn">purple</div></div>
+        </div>
+        <div class="rail"><span>Default = all turquoise</span><span>Swapped = gradient shown</span></div>
+      </div>
+      <table class="states">
+        <caption>CC swap status</caption>
+        <tr><th><span class="swatch" style="background:#00c8b4"></span>All turquoise</th><td><b>Default</b> — X→CC74, Y→CC1.</td></tr>
+        <tr><th>Turquoise → purple</th><td><b>Swapped</b> — Y→CC74, X→CC1. Saved per preset.</td></tr>
+      </table>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — Flex-range editor (ch5 hold 1 s) — editing MAX</div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit w-on" style="--c:#ffffff"><span class="w" style="background:#ff0000"></span></div><div class="idx">6</div><div class="fn">ones (tinted)</div></div>
+          <div class="led active"><div class="dot lit w-on" style="--c:#ffffff"><span class="w" style="background:#ff0000"></span></div><div class="idx">5</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit w-dim" style="--c:#ffffff"><span class="w" style="background:#ff0000"></span></div><div class="idx">4</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">3</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">2</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ff5000"></div><div class="idx">1</div><div class="fn">decade</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">—</div></div>
+        </div>
+        <div class="rail"><span>Note number readout</span><span>Tint = which endpoint</span></div>
+      </div>
+      <table class="states">
+        <caption>Flex-range editor — flex notes audible to test the range</caption>
+        <tr><th class="ctrl">ch3 / ch6</th><td>Raise / lower <b>MAX</b> note (bent end). Ones LEDs tinted <span class="swatch" style="background:#ff0000"></span>dim red (R50).</td></tr>
+        <tr><th class="ctrl">ch9 / ch12</th><td>Raise / lower <b>MIN</b> note (extended end). Ones LEDs tinted <span class="swatch" style="background:#0000ff"></span>dim blue (B50).</td></tr>
+        <tr><th>Readout</th><td>Same numeric encoding as the tempo view — shows the MIDI note number of the endpoint last touched.</td></tr>
+        <tr><th>Exit</th><td>Auto-exits after 5 s idle, or re-hold ch5.</td></tr>
+      </table>
+
+    </div>
+  </section>
+
+  <!-- ====================== 07 PRESET BROWSER + SUB-MENUS ====================== -->
+  <section class="mode" id="preset">
+    <div class="mode__head">
+      <span class="num">07 — Mode (latched)</span>
+      <h2>Preset Browser<br>+ Sub-menus</h2>
+      <div class="enter">ENTER / EXIT<br>hold octave-down · 1 s</div>
+      <p>Default sub-view: the selected preset (0–62) as a colour band — nine colours × seven
+         fill-lengths = 63 slots, filling from LED 6. Control channels switch to quantize,
+         brightness and tempo-bend sub-views. An incoming MIDI Program Change (0–62) also loads
+         a preset and flashes its band for 1.2 s.</p>
+    </div>
+    <div class="mode__body">
+
+      <div class="strip-block">
+        <div class="strip-caption"><span>Default — green band, 4 LEDs (slot 25)</span><span class="state">PRESET BAND</span></div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#00ff00"></div><div class="idx">6</div><div class="fn">fill 1</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ff00"></div><div class="idx">5</div><div class="fn">fill 2</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ff00"></div><div class="idx">4</div><div class="fn">fill 3</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ff00"></div><div class="idx">3</div><div class="fn">fill 4</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">2</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">1</div><div class="fn">—</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">—</div></div>
+        </div>
+        <div class="rail"><span>LED 6 · fills first</span><span>LED 0 · fills last</span></div>
+      </div>
+
+      <table class="states">
+        <caption>Controls (while latched)</caption>
+        <tr><th class="ctrl">ch3 / ch6</th><td>Scroll preset selection up / down.</td></tr>
+        <tr><th class="ctrl">ch9 / ch12</th><td>Cycle flex / note quantize → Quantize sub-view.</td></tr>
+        <tr><th class="ctrl">ch11</th><td>Cycle brightness → Brightness sub-view.</td></tr>
+        <tr><th class="ctrl">ch8</th><td>Toggle tempo-tracking pitch bend → Tempo-bend sub-view.</td></tr>
+        <tr><th class="ctrl">ch2 touch</th><td>Load the selected preset and exit.</td></tr>
+        <tr><th class="ctrl">Pinky-palm 1 s</th><td>Save current settings to the slot and exit.</td></tr>
+        <tr><th class="ctrl">Octave-down 1 s</th><td>Exit without load or save.</td></tr>
+      </table>
+      <div class="keyline">
+        <span><span class="swatch" style="background:#a000ff"></span>purple</span>
+        <span><span class="swatch" style="background:#ff50b4"></span>pink</span>
+        <span><span class="swatch" style="background:#0000ff"></span>blue</span>
+        <span><span class="swatch" style="background:#00ffff"></span>cyan</span>
+        <span><span class="swatch" style="background:#00ff00"></span>green</span>
+        <span><span class="swatch" style="background:#ffff00"></span>yellow</span>
+        <span><span class="swatch" style="background:#ff5000"></span>orange</span>
+        <span><span class="swatch" style="background:#ff0000"></span>red</span>
+        <span><span class="swatch" style="background:#fff;border:1px solid #000"></span>white (W)</span>
+      </div>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — Quantize (note 1/16 purple · flex 1/16 cyan)</div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#a000ff"></div><div class="idx">6</div><div class="fn">note bar</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#a000ff"></div><div class="idx">5</div><div class="fn">note 1/16</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">4</div><div class="fn">note 1/32</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">3</div><div class="fn">blank</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ffff"></div><div class="idx">2</div><div class="fn">flex bar</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ffff"></div><div class="idx">1</div><div class="fn">flex 1/16</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">flex 1/32</div></div>
+        </div>
+        <div class="rail"><span>Note · LEDs 6·5·4</span><span>2·1·0 · Flex</span></div>
+      </div>
+      <table class="states">
+        <caption>Quantize — note (ch12) on 6→4 purple · flex (ch9) on 2→0 cyan</caption>
+        <tr><th class="ctrl">Note · ch12</th><td><span class="swatch" style="background:#ff5000"></span>OFF = LED 6 orange &nbsp; <span class="swatch" style="background:#a000ff"></span>1/8 → 1/16 → 1/32 = 6 → 6,5 → 6,5,4 purple</td></tr>
+        <tr><th class="ctrl">Flex · ch9</th><td><span class="swatch" style="background:#ffd400"></span>OFF = LED 2 yellow &nbsp; <span class="swatch" style="background:#00ffff"></span>1/8 → 1/16 → 1/32 = 2 → 2,1 → 2,1,0 cyan</td></tr>
+        <tr><th>LED 3</th><td>Always blank (separator).</td></tr>
+      </table>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — Brightness (ch11, rainbow preview)</div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#ff0000"></div><div class="idx">6</div><div class="fn">red</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ff8000"></div><div class="idx">5</div><div class="fn">orange</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#ffff00"></div><div class="idx">4</div><div class="fn">yellow</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ff00"></div><div class="idx">3</div><div class="fn">green</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ffff"></div><div class="idx">2</div><div class="fn">cyan</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#0000ff"></div><div class="idx">1</div><div class="fn">blue</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#8000ff"></div><div class="idx">0</div><div class="fn">violet</div></div>
+        </div>
+        <div class="rail"><span>Whole strip dims/brightens</span><span>off → 10 → … → 255</span></div>
+      </div>
+      <table class="states">
+        <caption>Brightness — ch11 cycles</caption>
+        <tr><th class="ctrl">Cycle</th><td><b>off → 10 → 30 → 60 → 120 → 180 → 255</b> (wraps). Rainbow brightness tracks the level; <b>off</b> shows a dark strip. Saved per preset.</td></tr>
+      </table>
+
+      <div class="strip-block">
+        <div class="subhead">Sub-view — Tempo-bend (ch8, enabled)</div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#ff0000"></div><div class="idx">6</div><div class="fn">red</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#cc1133"></div><div class="idx">5</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#992266"></div><div class="idx">4</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#663399"></div><div class="idx">3</div><div class="fn">gradient</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#3344cc"></div><div class="idx">2</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#1133dd"></div><div class="idx">1</div><div class="fn">—</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#0000ff"></div><div class="idx">0</div><div class="fn">blue</div></div>
+        </div>
+        <div class="rail"><span>All red = OFF</span><span>Red→blue = ON</span></div>
+      </div>
+      <table class="states">
+        <caption>Tempo-bend (ch8) — retunes to incoming clock tempo</caption>
+        <tr><th><span class="swatch" style="background:#ff0000"></span>All red</th><td><b>Disabled.</b></td></tr>
+        <tr><th>Red → blue</th><td><b>Enabled</b> — once/sec, pitch-bends to retune project tempo to incoming MIDI clock. Saved per preset.</td></tr>
+        <tr><th class="ctrl">PC 0–62</th><td>Program Change loads that preset and flashes its band 1.2 s.</td></tr>
+      </table>
+
+    </div>
+  </section>
+
+  <!-- ====================== 08 BATTERY ====================== -->
+  <section class="mode" id="battery">
+    <div class="mode__head">
+      <span class="num">08 — Indicator · 2 s</span>
+      <h2>Battery Level</h2>
+      <div class="enter">SHOWN ON<br>boot · or IMU double-tap</div>
+      <p>Green bars from LED 6 show charge (2–7 bars). A low battery blinks LED 6 red. While
+         charging, LED 6 turns solid blue regardless of level. Works whether or not BLE is
+         connected.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Example — 4 bars, healthy</span><span class="state">GREEN BARS</span></div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#00d12a"></div><div class="idx">6</div><div class="fn">bar 1</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00d12a"></div><div class="idx">5</div><div class="fn">bar 2</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00d12a"></div><div class="idx">4</div><div class="fn">bar 3</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00d12a"></div><div class="idx">3</div><div class="fn">bar 4</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">2</div><div class="fn">bar 5</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">1</div><div class="fn">bar 6</div></div>
+          <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">bar 7</div></div>
+        </div>
+        <div class="rail"><span>LED 6 · fills first</span><span>Full charge · LED 0</span></div>
+      </div>
+      <table class="states">
+        <caption>States</caption>
+        <tr><th><span class="swatch" style="background:#00d12a"></span>Green bars</th><td>2–7 LEDs from LED 6 = capacity.</td></tr>
+        <tr><th><span class="swatch" style="background:#ff0000"></span>LED 6 blink red</th><td>Low battery (≤ 1 bar).</td></tr>
+        <tr><th><span class="swatch" style="background:#0000ff"></span>LED 6 solid blue</th><td>Charging — overrides level on LED 6.</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span>LED Mode Reference</span>
+    <span>Open Sans · Swiss Minimal</span>
+    <span>Strip order 6 → 0 · Pinky → Index</span>
+  </footer>
+
+</div>
+</body>
+</html>
