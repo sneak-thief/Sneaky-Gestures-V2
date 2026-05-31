@@ -12,7 +12,7 @@
 | Adafruit 1167   | 1 | Knit Conductive Fabric with silver |
 | Cycling glove | 1 | Choose something tight fighting, breathable and comfortable |
 | Silicone wire | 2m | 0.25mm2 with silicone insulation |
-| lycra fabric | 1/4m2 | Stretchy and this lycra for covering wires |
+| lycra fabric | 1/4m2 | Stretchy and thin lycra for covering wires |
 
 ![Bill of materials](../build/00-glove-bom.jpg)
 
