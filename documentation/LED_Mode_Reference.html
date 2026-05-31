@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sneaky Gestures V2: LED Mode Reference</title>
+<title>LED Mode Reference</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
@@ -38,6 +38,14 @@
   }
 
   /* ---------- masthead ---------- */
+  .repo{
+    font-size:11px; font-weight:700; letter-spacing:0.22em;
+    text-transform:uppercase; color:var(--mute);
+    margin-bottom:10px;
+	
+	
+  }
+  
   .masthead{
     border-top:6px solid var(--ink);
     padding-top:18px;
@@ -49,14 +57,25 @@
   }
   .masthead h1{
     font-weight:800;
-    font-size: clamp(34px, 7vw, 72px);
     letter-spacing:-0.02em;
     line-height:0.98;
     margin:0;
     text-transform:uppercase;
   }
   .masthead h1 span{ display:block; }
+  .masthead h1 .product{
+    font-size: clamp(30px, 7vw, 62px);
+  }
+  .masthead h1 .doc{
+    font-size: clamp(18px, 3vw, 30px);
+    font-weight:700;
+    color:var(--mute);
+    letter-spacing:-0.01em;
+    margin-top:0px;
+  }
   .masthead .meta{
+    padding-top:0px;
+	margin-top: 0px;
     text-align:right;
     font-size:12px;
     letter-spacing:0.16em;
@@ -247,16 +266,15 @@
 <div class="wrap">
 
   <!-- ====================== MASTHEAD ====================== -->
+  <div class="repo"><a href="https://github.com/sneak-thief/Sneaky-Gestures-V2">github.com/sneak-thief/Sneaky-Gestures-V2</a></div>
   <header class="masthead">
-    <h1><span>Sneaky Gestures V2</span><span></span>LED</span><span>Mode</span><span>Reference</span></h1>
-    <div class="meta">
-      7-Segment Indicator<br>
+    <h1><span class="product">Sneaky Gestures V2</span><span class="doc">LED Mode Reference</span></h1>
+    <div class="meta">7-Segment Indicator<br>
       Glove MIDI Controller<br>
-      Rev. — Opus build<br>
+      Rev. 1<br>
       Sheet 01 / 01
     </div>
     <p class="lede">
-      <a href="https://github.com/sneak-thief/Sneaky-Gestures-V2">https://github.com/sneak-thief/Sneaky-Gestures-V2</a>
       The strip carries <strong>seven RGBW LEDs</strong>, numbered <strong>6 → 0</strong> in
       physical order: <strong>LED 6 at the pinky end</strong>, <strong>LED 0 at the index end</strong>.
       Each mode repaints the strip with a distinct meaning. Every mode below is drawn at a
