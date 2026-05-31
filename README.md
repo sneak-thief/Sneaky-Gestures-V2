@@ -128,7 +128,7 @@ Documented in detail:
 │   └── light_CD74HC4067.{h,cpp}                Lightweight 4067 mux/demux library 
 ├── build/
 │   ├── README.md                               build description
-│   └── 00*.jpg - 14*.jpg                       build images (jpg)
+│   └── 00*.jpg - 17*.jpg                       build images (jpg)
 ├── documentation/
 │   ├── README.md                               user guide
 |   └── LED_Mode_Reference.html                 illustrated LED reference
