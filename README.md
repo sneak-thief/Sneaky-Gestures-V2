@@ -126,6 +126,9 @@ Documented in detail:
 ├── lib/Lightweight-CD74HC4067-Arduino-main
 │   ├── README.md                  Lightweight 4067 mux/demux library 
 │   └── light_CD74HC4067.{h,cpp}   Lightweight 4067 mux/demux library 
+├── build/
+│   ├── README.md                               Build description
+│   └── 00*.jpg - 14*.jpg                       Build images (jpg)
 ├── documentation/
 │   ├── README.md                 user guide
 |   └── LED_Mode_Reference.html   illustrated LED reference
