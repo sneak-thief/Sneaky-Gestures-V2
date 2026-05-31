@@ -12,6 +12,7 @@
 | Adafruit 1167   | 1 | Knit Conductive Fabric with silver |
 | Cycling glove | 1 | Choose something tight fighting, breathable and comfortable |
 | Silicone wire | 2m | 0.25mm2 with silicone insulation |
+| JST connector | 1 | 1 male/female pair of connectors for the battery |
 | lycra fabric | 1/4m2 | Stretchy and thin lycra for covering wires |
 
 ![Bill of materials](../build/00-glove-bom.jpg)
