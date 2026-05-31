@@ -115,24 +115,24 @@ Documented in detail:
 ```
 
 ├── src/
-│   ├── main.cpp              firmware entry: input scan, MIDI, BLE, presets
-│   ├── LedDisplay.{h,cpp}    LED rendering module
-│   ├── DebugSerial.h         debug-print macros
-│   └── TempoPitchShifter.{h,cpp}  inlined pitch-bend math library
+│   ├── main.cpp                                firmware entry: input scan, MIDI, BLE, presets
+│   ├── LedDisplay.{h,cpp}                      LED rendering module
+│   ├── DebugSerial.h                           debug-print macros
+│   └── TempoPitchShifter.{h,cpp}               inlined pitch-bend math library
 ├── hardware/
 │   ├── README.md                               Bill of Materials
 │   ├── Sneaky-Gestures-V2-Schematic_V1.0.png   Schematics V1 (png)
 │   └── Sneaky-Gestures-V2-Schematic_V1.0.pdf   Schematics V1 (pdf)
 ├── lib/Lightweight-CD74HC4067-Arduino-main
-│   ├── README.md                  Lightweight 4067 mux/demux library 
-│   └── light_CD74HC4067.{h,cpp}   Lightweight 4067 mux/demux library 
+│   ├── README.md                               Lightweight 4067 mux/demux library 
+│   └── light_CD74HC4067.{h,cpp}                Lightweight 4067 mux/demux library 
 ├── build/
-│   ├── README.md                               Build description
-│   └── 00*.jpg - 14*.jpg                       Build images (jpg)
+│   ├── README.md                               build description
+│   └── 00*.jpg - 14*.jpg                       build images (jpg)
 ├── documentation/
-│   ├── README.md                 user guide
-|   └── LED_Mode_Reference.html   illustrated LED reference
-├── platformio.ini            platformio setup
-└── README.md                 this file
+│   ├── README.md                               user guide
+|   └── LED_Mode_Reference.html                 illustrated LED reference
+├── platformio.ini                              platformio setup
+└── README.md                                   this file
 
 ```
