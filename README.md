@@ -1,5 +1,8 @@
 # Sneaky Gestures V2: Glove MIDI Controller
 
+<img src="build/13-glove-front.jpg" width="49%" alt="Sneaky Gestures V2 - Front"><img src="build/14-glove-back.jpg" width="49%" alt="Sneaky Gestures V2 - Back">
+
+
 A wearable BLE-MIDI gestural instrument. The thumb acts as a common electrode
 that touches conductive pads on the other fingers to play notes; a flex sensor
 in the index finger bends pitch, a thumb FSR sends aftertouch, and the
@@ -8,6 +11,9 @@ of the hand displays the current mode at a glance.
 
 Built on a **Seeed XIAO nRF52840 Sense**. Transmits as a standard BLE-MIDI
 device — pair it with any DAW, hardware synth, or mobile MIDI host.
+
+
+<img src="build/15-glove-bend1.jpg" width="49%" alt="Sneaky Gestures V2 - Front bending"><img src="build/16-glove-bend2.jpg" width="49%" alt="Sneaky Gestures V2 - Back bending">
 
 ---
 
@@ -100,6 +106,7 @@ All declared in `platformio.ini`:
 
 Documented in detail: 
 
+- Build images [README.md](build/README.md)
 - User guide [README.md](documentation/README.md)
 - LED display [LED_Mode_Reference.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/LED_Mode_Reference.html)
 
