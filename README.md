@@ -177,4 +177,5 @@ Development thread for V1:
 I perfomed live on tour with V1 for a year for my [Sneak-Thief](https://sneak-thief.com) project. V2 replicates most of the features of V1, with the obvious addition of BLE, LEDs, 12 notes instead of 8 and modal controls directly on the glove. V2 will be used live for my post-industrial / EBM project, [INVOLUCIJA](https://involucija.org). Follow updates here - [https://instagram.com/invo.lucija/](https://www.instagram.com/invo.lucija/).    
 
 Fun fact: Imogen Heap's team for her MiMu gloves referenced Sneaky Gestures V1 in their [development blog](https://theglovesproject.com/data-gloves-overview/).
-  
+
+Coda: _the lost glove is happy_
