@@ -188,6 +188,17 @@ each display means in each mode — see the **[LED_Mode_Reference.html](https://
 | Check battery | Double-tap the back of the hand |
 
 ---
+## 9. Serial Debug
+
+Serial deubgging can be set in DebugSerial.h
+
+Set either to 1 to enable, 0 to disable.
+
+The default is that both are enabled:
+- #define DEBUG_SERIAL       1
+- #define DEBUG_SERIAL_BOOT  1
+
+---
 
 *Tip: start simple — pick a scale, set your octave, and just play across the
 finger pads. Add the flex glide and thumb pressure once the note layout feels
