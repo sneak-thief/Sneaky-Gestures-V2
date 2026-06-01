@@ -4,6 +4,9 @@
 //
 // Scale handler
 //
+// Credit: Audo Commander's ACSensorizer
+// https://www.midibox.org/dokuwiki/acsensorizer_04
+// 
 // ScaleQuant.cpp -- scale tables, pitch mapping, key spread, quantize grids.
 #include "ScaleQuant.h"
 #include "LedDisplay.h"    // NoteQuantizeMode / FlexQuantizeMode enums
