@@ -124,12 +124,29 @@ quantize settings, brightness, and tilt-CC assignment.
   from the preset tempo). Useful for staying at the same pitch of audio whose 
   pitch changes with tempo, eg. vinyl, CDJs in variable pitch mode, etc. 
 - **Cycle LED brightness**, with a live rainbow preview.
-- **Load** the highlighted preset and exit (Index modal pad).
-- **Save** to the current slot and exit (hold the Pinky palm pad).
+- **Load** the highlighted preset and exit (Index modal pad). The strip flashes
+  a green→cyan bar to confirm the load.
+- **Save** to the current slot and exit (hold the Pinky palm pad). The strip
+  flashes an orange→cyan bar to confirm the save.
 - **Exit without saving** (hold Octave ↓).
 
 Your host can also switch presets directly by sending a **MIDI Program Change** —
 the strip flashes a band of color to confirm the load.
+
+**Backing up and restoring presets.** Connect the glove over USB and open a serial monitor at
+115200 baud. Type `DUMP` to print every saved preset as a `PATCH` line you can
+copy and keep; paste a line back with `LOAD <slot> <line>` to restore it. Each
+line is checksummed, so a bad paste is refused rather than written.
+
+The `DUMP` command (no argument) is the bulk dump — it walks all 63 slots and prints a PATCH <slot> <base64> line for every slot that holds a valid patch, bracketed by ; ---- patch dump begin ---- / ; ---- patch dump end (N patches) ----. You copy those lines out of the serial monitor to back them up.
+The full set of console commands (USB serial, 115200 baud, type and press Enter):
+
+- `DUMP` — bulk dump of all non-empty slots
+- `DUMP <n>` — dump just slot n
+- `LIST` — show which slots have a valid patch (with tempo/scale/octave)
+- `LOAD <slot> <base64>` — paste a line back to restore it to that slot (validated by CRC + magic + version before writing)
+- `FORMAT YES` — reformat the filesystem
+- `HELP` — list the commands
 
 ---
 
@@ -143,6 +160,8 @@ the strip flashes a band of color to confirm the load.
 | Solid blue center LED                    | Root-transpose (mode rotation) is active |
 | A colored bar (red/yellow/blue)          | Scale edit — shows the selected scale    |
 | Numeric readout                          | Adjusting tempo or flex-range values     |
+| Orange→cyan bar (brief)                  | Preset saved                             |
+| Green→cyan bar (brief)                   | Preset loaded                            |
 | Green bars                               | Battery level (after double-tap or boot) |
 | Blinking red LED                         | Battery low                              |
 | Solid blue on first LED + green LEDs     | Charging                                 |
