@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 
+/*****************************************************************************/
+// Sneaky Gestures V2: MIDI BLE Gestural Glove
+// https://github.com/sneak-thief/Sneaky-Gestures-V2
 // -----------------------------------------------------------------------------
 // Debug serial logging. Two tiers so chatty per-event logging can be compiled
 // out for release builds while keeping (or separately gating) startup/boot
