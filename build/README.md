@@ -27,9 +27,37 @@ Sewing the index-finger flex sensor and the thumb FSR.
 
 ### 04 · Wiring — finger pads
 Beginning the pad and sensor wire routing. 
-The boost voltage regulator board was installed under the LED strip. 
-The +/- outputs of the boost regulator were soldered to wire poked up through the strip.
-The input end of the boost regulator is soldered directly to the +/- battery terminals on the Seeed XIAO
+
+- Oct up & down: 4067 channel 0 & 1
+- Index modal: 4067 channel 2
+- Pinky palm: 4067 channel 15
+
+Note: I had originally planned the lowest note to be the base of the index and wired it as follows:
+
+| Finger | Note #s from base to tip | 4067 channels |
+|--------|--------------------------|---------------| 
+| Index  |  1, 2, 3                 | 3, 4, 5       |
+| Middle |  4, 5, 6                 | 6, 7, 8       |
+| Ring   | 7, 8, 9                  | 9, 10, 11     |
+| Pinky  | 10, 11 12                | 12, 13, 14    |
+ 
+
+**However** in the code, I ended up reversing the low-to-high note order so that the base of the pinky is the lowest note. 
+
+This explains the unusual note-to-channel mapping:
+
+| Finger | Note #s from base to tip | 4067 channels |
+|--------|--------------------------|---------------| 
+| Index  |  10, 11, 12              | 3, 4, 5       |
+| Middle |  7, 8, 9                 | 6, 7, 8       |
+| Ring   | 4, 5, 6                  | 9, 10, 11     |
+| Pinky  | 1, 2, 3                  | 12, 13, 14    |
+
+So the 4067 channel scan order of notes 1-12 is 12,13,14,9,10,11,6,7,8,3,4,5
+
+- The boost voltage regulator board was installed under the LED strip. 
+- The +/- outputs of the boost regulator were soldered to wire poked up through the strip.
+- The input end of the boost regulator is soldered directly to the +/- battery terminals on the Seeed XIAO
 
 ![Glove wiring](04-glove-wiring.jpg)
 
