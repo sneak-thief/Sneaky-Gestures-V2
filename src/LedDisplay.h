@@ -5,9 +5,12 @@
 #include <Adafruit_NeoPixel.h>
 
 // ---------------------------------------------------------------------------
+// Sneaky Gestures V2: MIDI BLE Gestural Glove
+// https://github.com/sneak-thief/Sneaky-Gestures-V2
+//
 // LED display / animation module.
 //
-// Extracted from main.cpp. Owns the NeoPixel strip rendering: per-finger note
+// Owns the NeoPixel strip rendering: per-finger note
 // animations + ripple, and all modal indicator screens (octave, spread, scale,
 // quantize, preset browser, brightness, tempo-bend, battery, tap tempo, flex
 // bar, orange flash). The module reads a number of shared globals that remain
