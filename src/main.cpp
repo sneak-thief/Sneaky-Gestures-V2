@@ -1,5 +1,6 @@
 /*****************************************************************************/
 // Sneaky Gestures V2: MIDI BLE Gestural Glove
+// https://github.com/sneak-thief/Sneaky-Gestures-V2
 // Target: Seeed XIAO nRF52840 Sense  |  Framework: Adafruit nRF52 BSP
 // ---------------------------------------------------------------------------
 // A wearable MIDI controller transmitting over BLE. The thumb makes contact
@@ -42,6 +43,8 @@
 #include <MIDI.h>             // MIDI Library
 #include "LSM6DS3.h"          // IMU Library
 #include <math.h> // expf, fabsf for LED ripple math
+#include <string.h>  // memcpy, strncmp for the serial patch console
+#include <stdlib.h>  // atoi for the serial patch console
 #include <Adafruit_LittleFS.h>      // LittleFS over internal flash
 #include <InternalFileSystem.h>     // nRF52 internal flash filesystem (Adafruit BSP)
 #include "TempoPitchShifter.h"      // tempo->pitch-bend retune helper
@@ -578,6 +581,13 @@ unsigned long pcPresetDisplayStartMs = 0;
 bool pcPresetDisplayActive = false;
 int  pcPresetDisplaySlot = 0; // which slot's bar to draw during the override
 
+// Brief confirmation flash shown when a patch is saved or loaded: a 300 ms
+// gradient bar across the strip. Save = orange->cyan, Load = green->cyan.
+extern const unsigned long PATCH_CONFIRM_MS = 300;
+unsigned long patchConfirmStartMs = 0;
+bool patchConfirmActive = false;
+int  patchConfirmKind = 0; // 0 = save (orange->cyan), 1 = load (green->cyan)
+
 // ch3 / ch6 hold-repeat scrolling of the preset indicator while browsing.
 const unsigned long PRESET_SCROLL_REPEAT_DELAY_MS = 400;    // initial hold before repeat
 const unsigned long PRESET_SCROLL_REPEAT_INTERVAL_MS = 150; // interval between repeats
@@ -591,7 +601,19 @@ unsigned long presetScrollLastStepMs[16] = {0};
 // changes.
 // -----------------------------------------------------------------------------
 #define PATCH_MAGIC   0x47415450UL // 'PTAG'
-#define PATCH_VERSION 5
+#define PATCH_VERSION 6            // bumped to 6: added trailing CRC32 field
+
+// -----------------------------------------------------------------------------
+// FACTORY RESET flag.
+//   Set to 1, build + flash, and power on ONCE. At boot the firmware reformats
+//   the internal-flash filesystem -- wiping ALL saved patches AND the BLE
+//   bonding data (Bluefruit stores bonds as files in the same InternalFS), then
+//   continues to boot normally. This is the fix for "advertises but won't
+//   connect" caused by corrupted bonds, and for a corrupted patch filesystem.
+//   AFTER the reset boot: set this back to 0 and reflash, or every boot wipes.
+//   Remember to also "forget"/remove the glove on the host's Bluetooth list.
+// -----------------------------------------------------------------------------
+#define FACTORY_RESET 0
 
 struct Patch {
   uint32_t magic;
@@ -609,6 +631,7 @@ struct Patch {
   int   brightnessLevel;
   int   tempoBendEnabled;
   int   ccSwapped;
+  uint32_t crc;   // CRC32 over all preceding bytes; MUST be the last field
 };
 
 // NoteSpread is defined much later but loadPatch needs it; forward-declare.
@@ -625,6 +648,37 @@ static void patchPath(int slot, char out[20])
 {
   // e.g. "/patch07.bin"
   snprintf(out, 20, "/patch%02d.bin", slot);
+}
+
+// Standard CRC-32 (poly 0xEDB88320). Used to checksum patch blobs both in flash
+// and over the serial console.
+static uint32_t crc32_buf(const uint8_t *data, size_t len)
+{
+  uint32_t crc = 0xFFFFFFFFUL;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (int b = 0; b < 8; b++) {
+      uint32_t mask = -(crc & 1U);
+      crc = (crc >> 1) ^ (0xEDB88320UL & mask);
+    }
+  }
+  return ~crc;
+}
+
+// CRC over every byte of the Patch EXCEPT its own trailing crc field. The crc
+// field is last and the struct is all 4-byte members (no trailing padding), so
+// this is exactly sizeof(Patch) - sizeof(uint32_t) bytes from the start.
+static uint32_t patchCrc(const Patch &p)
+{
+  return crc32_buf((const uint8_t *)&p, sizeof(Patch) - sizeof(p.crc));
+}
+
+// True only if magic, version, AND the stored CRC all check out. No side effects.
+static bool patchValid(const Patch &p)
+{
+  return p.magic == PATCH_MAGIC &&
+         p.version == PATCH_VERSION &&
+         p.crc == patchCrc(p);
 }
 
 bool savePatch(int slot)
@@ -647,6 +701,7 @@ bool savePatch(int slot)
   p.brightnessLevel  = brightnessLevel;
   p.tempoBendEnabled = tempoBendEnabled ? 1 : 0;
   p.ccSwapped        = ccSwapped ? 1 : 0;
+  p.crc              = patchCrc(p);   // checksum over all preceding fields
 
   char path[20];
   patchPath(slot, path);
@@ -676,26 +731,12 @@ bool savePatch(int slot)
   return true;
 }
 
-bool loadPatch(int slot)
+// Validate a patch blob and apply it to the live globals (with defensive
+// clamps). Shared by loadPatch() (reads from flash) and the serial console
+// loader (reads from a pasted Base64 line), so both paths validate identically.
+bool applyPatch(const Patch &p)
 {
-  if (slot < 0 || slot >= PRESET_COUNT) return false;
-
-  char path[20];
-  patchPath(slot, path);
-
-  File f(InternalFS);
-  if (!f.open(path, FILE_O_READ)) {
-    DBG_PRINT("loadPatch: no patch in slot ");
-    DBG_PRINTLN(slot);
-    return false;
-  }
-  Patch p;
-  size_t got = f.read((uint8_t *)&p, sizeof(p));
-  f.close();
-
-  if (got != sizeof(p) || p.magic != PATCH_MAGIC || p.version != PATCH_VERSION) {
-    DBG_PRINT("loadPatch: invalid/empty patch in slot ");
-    DBG_PRINTLN(slot);
+  if (!patchValid(p)) {
     return false;
   }
 
@@ -747,10 +788,335 @@ bool loadPatch(int slot)
   strip.setBrightness(BRIGHTNESS_LEVELS[brightnessLevel]); // apply restored brightness
 #endif
 
+  DBG_PRINTLN("Patch applied");
+  return true;
+}
+
+bool loadPatch(int slot)
+{
+  if (slot < 0 || slot >= PRESET_COUNT) return false;
+
+  char path[20];
+  patchPath(slot, path);
+
+  File f(InternalFS);
+  if (!f.open(path, FILE_O_READ)) {
+    DBG_PRINT("loadPatch: no patch in slot ");
+    DBG_PRINTLN(slot);
+    return false;
+  }
+  Patch p;
+  size_t got = f.read((uint8_t *)&p, sizeof(p));
+  f.close();
+
+  if (got != sizeof(p)) {
+    DBG_PRINT("loadPatch: invalid/empty patch in slot ");
+    DBG_PRINTLN(slot);
+    return false;
+  }
+  if (!applyPatch(p)) {
+    DBG_PRINT("loadPatch: bad magic/version in slot ");
+    DBG_PRINTLN(slot);
+    return false;
+  }
   DBG_PRINT("Patch loaded from slot ");
   DBG_PRINTLN(slot);
   return true;
 }
+
+// Arm the brief save/load confirmation flash (a 300 ms gradient bar).
+//   loaded == false -> SAVE confirmation (orange -> cyan)
+//   loaded == true  -> LOAD confirmation (green  -> cyan)
+void TriggerPatchConfirm(bool loaded)
+{
+  patchConfirmKind    = loaded ? 1 : 0;
+  patchConfirmStartMs = millis();
+  patchConfirmActive  = true;
+}
+
+// -----------------------------------------------------------------------------
+// Serial patch console.
+//
+// An interactive, host-independent way to back up and restore presets over the
+// USB serial monitor (115200 baud). Each patch is emitted as one self-contained
+// line so it can be copied straight out of the terminal and pasted back later:
+//
+//     PATCH <slot> <base64-of-(Patch bytes + CRC32)>
+//
+// The trailing CRC32 lets the loader reject a corrupted/garbled paste before it
+// ever touches flash. Commands (type into the serial monitor, newline-terminated):
+//
+//     HELP            list commands
+//     LIST            show which slots contain a valid patch
+//     DUMP            print PATCH lines for every non-empty slot
+//     DUMP <n>        print the PATCH line for slot n
+//     LOAD <line>     decode a pasted "<slot> <base64>" and write it to that slot
+//     FORMAT YES      reformat the LittleFS filesystem (erases all patches)
+//
+// The console is serviced from loop() ABOVE the BLE gate, so it works whether or
+// not a MIDI host is connected.
+// -----------------------------------------------------------------------------
+
+// Case-insensitive check that `s` begins with command word `kw` (length n).
+// Avoids depending on POSIX strncasecmp being transitively included.
+static bool cmdIs(const char *s, const char *kw, size_t n)
+{
+  for (size_t i = 0; i < n; i++) {
+    char a = s[i], b = kw[i];
+    if (a >= 'a' && a <= 'z') a -= 32;
+    if (b >= 'a' && b <= 'z') b -= 32;
+    if (a != b) return false;
+  }
+  return true;
+}
+
+static const char B64[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Encode len bytes of src into dst (must hold ceil(len/3)*4 + 1 chars). NUL-term.
+static void base64_encode(const uint8_t *src, size_t len, char *dst)
+{
+  size_t o = 0;
+  for (size_t i = 0; i < len; i += 3) {
+    uint32_t n = (uint32_t)src[i] << 16;
+    int rem = (int)(len - i);
+    if (rem > 1) n |= (uint32_t)src[i + 1] << 8;
+    if (rem > 2) n |= (uint32_t)src[i + 2];
+    dst[o++] = B64[(n >> 18) & 0x3F];
+    dst[o++] = B64[(n >> 12) & 0x3F];
+    dst[o++] = (rem > 1) ? B64[(n >> 6) & 0x3F] : '=';
+    dst[o++] = (rem > 2) ? B64[n & 0x3F]        : '=';
+  }
+  dst[o] = '\0';
+}
+
+static int b64val(char c)
+{
+  if (c >= 'A' && c <= 'Z') return c - 'A';
+  if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+  if (c >= '0' && c <= '9') return c - '0' + 52;
+  if (c == '+') return 62;
+  if (c == '/') return 63;
+  return -1; // '=' or invalid
+}
+
+// Decode a Base64 string into dst (capacity dstCap). Returns decoded byte count,
+// or -1 on malformed input / overflow. Ignores trailing '=' padding.
+static int base64_decode(const char *src, uint8_t *dst, size_t dstCap)
+{
+  int acc = 0, bits = 0;
+  size_t o = 0;
+  for (const char *p = src; *p; p++) {
+    if (*p == '=' || *p == '\r' || *p == '\n' || *p == ' ') continue;
+    int v = b64val(*p);
+    if (v < 0) return -1;
+    acc = (acc << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      if (o >= dstCap) return -1;
+      dst[o++] = (uint8_t)((acc >> bits) & 0xFF);
+    }
+  }
+  return (int)o;
+}
+
+// Read slot's raw Patch bytes from flash into p. Returns true only if the file
+// exists, is the right size, and is fully valid (magic + version + CRC).
+static bool readPatchBytes(int slot, Patch &p)
+{
+  if (slot < 0 || slot >= PRESET_COUNT) return false;
+  char path[20];
+  patchPath(slot, path);
+  File f(InternalFS);
+  if (!f.open(path, FILE_O_READ)) return false;
+  size_t got = f.read((uint8_t *)&p, sizeof(p));
+  f.close();
+  if (got != sizeof(p)) return false;
+  return patchValid(p);
+}
+
+// Write raw Patch bytes to a slot file (overwrites). Returns true on success.
+static bool writePatchBytes(int slot, const Patch &p)
+{
+  if (slot < 0 || slot >= PRESET_COUNT) return false;
+  char path[20];
+  patchPath(slot, path);
+  InternalFS.remove(path);
+  File f(InternalFS);
+  if (!f.open(path, FILE_O_WRITE)) return false;
+  size_t wrote = f.write((const uint8_t *)&p, sizeof(p));
+  f.close();
+  return wrote == sizeof(p);
+}
+
+// Print one "PATCH <slot> <base64>" line. The Patch struct already carries its
+// own trailing CRC32, so the encoded blob is just the struct bytes; the loader
+// recomputes and checks that CRC on the way back in.
+static void printPatchLine(int slot, const Patch &p)
+{
+  char b64[((sizeof(Patch) + 2) / 3) * 4 + 1];
+  base64_encode((const uint8_t *)&p, sizeof(Patch), b64);
+
+  Serial.print("PATCH ");
+  Serial.print(slot);
+  Serial.print(' ');
+  Serial.println(b64);
+}
+
+static void consoleDumpSlot(int slot)
+{
+  Patch p;
+  if (readPatchBytes(slot, p)) {
+    printPatchLine(slot, p);
+  } else {
+    Serial.print("; slot ");
+    Serial.print(slot);
+    Serial.println(" empty/invalid");
+  }
+}
+
+static void consoleDumpAll()
+{
+  Serial.println("; ---- patch dump begin ----");
+  int found = 0;
+  for (int s = 0; s < PRESET_COUNT; s++) {
+    Patch p;
+    if (readPatchBytes(s, p)) { printPatchLine(s, p); found++; }
+  }
+  Serial.print("; ---- patch dump end (");
+  Serial.print(found);
+  Serial.println(" patches) ----");
+}
+
+static void consoleList()
+{
+  Serial.println("; slots with a valid patch:");
+  int found = 0;
+  for (int s = 0; s < PRESET_COUNT; s++) {
+    Patch p;
+    if (readPatchBytes(s, p)) {
+      Serial.print(";   slot ");
+      Serial.print(s);
+      Serial.print("  tempo=");
+      Serial.print(p.tempo);
+      Serial.print(" scale=");
+      Serial.print(p.scale);
+      Serial.print(" oct=");
+      Serial.println(p.octave);
+      found++;
+    }
+  }
+  if (!found) Serial.println(";   (none)");
+}
+
+// Parse "<slot> <base64>" and write the decoded patch to that slot after the
+// CRC and magic/version all check out.
+static void consoleLoad(const char *args)
+{
+  while (*args == ' ') args++;
+  int slot = atoi(args);
+  // advance past the slot number and the following space(s) to the base64
+  while (*args && *args != ' ') args++;
+  while (*args == ' ') args++;
+  if (slot < 0 || slot >= PRESET_COUNT) {
+    Serial.println("; LOAD error: slot out of range (0..62)");
+    return;
+  }
+  if (!*args) {
+    Serial.println("; LOAD error: missing data");
+    return;
+  }
+
+  uint8_t buf[sizeof(Patch)];
+  int n = base64_decode(args, buf, sizeof(buf));
+  if (n != (int)sizeof(buf)) {
+    Serial.print("; LOAD error: bad length (got ");
+    Serial.print(n);
+    Serial.print(", expected ");
+    Serial.print((int)sizeof(buf));
+    Serial.println(")");
+    return;
+  }
+
+  Patch p;
+  memcpy(&p, buf, sizeof(Patch));
+  if (!patchValid(p)) {
+    // patchValid checks magic, version, and the struct's own CRC32, so this
+    // catches a corrupted paste, a wrong-version patch, or a truncated blob.
+    Serial.println("; LOAD error: invalid patch (bad CRC/magic/version) - not written");
+    return;
+  }
+  if (writePatchBytes(slot, p)) {
+    Serial.print("; LOAD ok: slot ");
+    Serial.print(slot);
+    Serial.println(" written");
+  } else {
+    Serial.print("; LOAD error: write failed for slot ");
+    Serial.println(slot);
+  }
+}
+
+static void consoleFormat(const char *args)
+{
+  while (*args == ' ') args++;
+  if (strncmp(args, "YES", 3) != 0) {
+    Serial.println("; FORMAT: type 'FORMAT YES' to confirm (erases ALL patches)");
+    return;
+  }
+  Serial.println("; formatting LittleFS...");
+  InternalFS.format();
+  if (InternalFS.begin()) Serial.println("; format complete, FS remounted");
+  else                    Serial.println("; format done but remount FAILED");
+}
+
+static void printConsoleHelp()
+{
+  Serial.println("; commands: HELP | LIST | DUMP | DUMP <n> | LOAD <slot> <b64> | FORMAT YES");
+}
+
+// Accumulate one line from Serial and dispatch it. Non-blocking: call often.
+static void serviceSerialConsole()
+{
+  static char line[256];
+  static size_t len = 0;
+
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      line[len] = '\0';
+      // trim leading spaces
+      char *cmd = line;
+      while (*cmd == ' ') cmd++;
+      if (*cmd) {
+        if      (cmdIs(cmd, "HELP", 4))   printConsoleHelp();
+        else if (cmdIs(cmd, "LIST", 4))   consoleList();
+        else if (cmdIs(cmd, "DUMP", 4)) {
+          const char *a = cmd + 4;
+          while (*a == ' ') a++;
+          if (*a) consoleDumpSlot(atoi(a));
+          else    consoleDumpAll();
+        }
+        else if (cmdIs(cmd, "LOAD", 4))   consoleLoad(cmd + 4);
+        else if (cmdIs(cmd, "FORMAT", 6)) consoleFormat(cmd + 6);
+        else {
+          Serial.print("; unknown command: ");
+          Serial.println(cmd);
+          printConsoleHelp();
+        }
+      }
+      len = 0;
+    } else if (len < sizeof(line) - 1) {
+      line[len++] = c;
+    } else {
+      // overflow: reset the line buffer to avoid splitting a command mid-stream
+      len = 0;
+      Serial.println("; input line too long - discarded");
+    }
+  }
+}
+
 
 const float CLOCK_EMA_ALPHA = 0.1f;            // Smoothing factor (smaller = smoother)
 const unsigned long CLOCK_TIMEOUT_MS = 2000;   // If no clock for this long, drop external lock
@@ -1869,6 +2235,9 @@ void debounceButton(int channel)
           bool ok = loadPatch(selectedPreset);
           (void)ok; // used only by debug print, which may be compiled out
           presetBrowserActive = false;
+#ifdef NEOPIXEL_ENABLED
+          if (ok) TriggerPatchConfirm(true); // green->cyan load confirmation
+#endif
           DBG_PRINT("Preset browser EXIT via load, slot ");
           DBG_PRINT(selectedPreset);
           DBG_PRINTLN(ok ? " (loaded)" : " (empty - nothing loaded)");
@@ -1903,6 +2272,9 @@ void debounceButton(int channel)
         bool ok = savePatch(selectedPreset);
         (void)ok; // used only by debug print, which may be compiled out
         presetBrowserActive = false;
+#ifdef NEOPIXEL_ENABLED
+        if (ok) TriggerPatchConfirm(false); // orange->cyan save confirmation
+#endif
         DBG_PRINT("Preset SAVE to slot ");
         DBG_PRINT(selectedPreset);
         DBG_PRINT(ok ? " (ok)" : " (FAILED)");
@@ -2092,6 +2464,20 @@ void setup()
     BOOT_PRINTLN("InternalFS begin failed -- patch save/load unavailable");
   }
 
+#if FACTORY_RESET
+  // Wipe everything in internal flash: all patches AND the BLE bond store
+  // (Bluefruit keeps bonds as files under InternalFS). Done BEFORE
+  // Bluefruit.begin() so the BLE stack comes up with a clean, unbonded state.
+  Serial.println("; FACTORY RESET: formatting internal flash (patches + BLE bonds)...");
+  InternalFS.format();
+  InternalFS.begin();
+  Serial.println("; FACTORY RESET complete. Set FACTORY_RESET back to 0 and reflash.");
+  Serial.println("; Also 'forget' the glove on your host's Bluetooth list, then re-pair.");
+#endif
+
+  // Announce the serial patch console (works over USB regardless of BLE state).
+  Serial.println("; patch console ready -- type HELP for commands");
+
   // Config the peripheral connection with maximum bandwidth
   Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 
@@ -2139,6 +2525,18 @@ void setup()
   pinMode(inputPin, INPUT_PULLUP); // Initialize 4067 signal pin return as input with 3.3V internal pullup
   // pinMode(muxEnablePin, OUTPUT);    // Initialize 4067 Enable pin as Output
   // digitalWrite(muxEnablePin, HIGH); // Turn on 4067 Enable pin permanently
+
+  // Seed the button debounce state to the released (HIGH) baseline. These
+  // arrays live in BSS and would otherwise start at 0 (== LOW == "pressed"),
+  // so the very first scan after a BLE connect would see every pad as held
+  // since boot and fire every hold-gesture at once (tap-tempo, preset browser,
+  // flex-range editor, save). Starting HIGH means a pad only registers once a
+  // real release->press edge occurs.
+  for (int i = 0; i < numChannels; i++) {
+    Buttons[i]          = HIGH;
+    prevButtons[i]      = HIGH;
+    lastDebounceTime[i] = millis();
+  }
 
   // Initiate note array starting with the root note and how many semitones until the next note, aka Spread
   NoteSpread(RootNote, Spread, RootNoteOffset);
@@ -2261,6 +2659,11 @@ void loop()
     TriggerBatteryDisplay(); // re-reads voltage and starts the 2 s display
 #endif
   }
+
+  // Service the serial patch console (HELP / LIST / DUMP / LOAD / FORMAT).
+  // Placed ABOVE the BLE-connection gates so backup and restore work over USB
+  // even when no MIDI host is connected.
+  serviceSerialConsole();
 
   // Don't continue if we aren't connected.
   if (!Bluefruit.connected()) {
