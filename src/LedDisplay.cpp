@@ -1,3 +1,9 @@
+/*****************************************************************************/
+// Sneaky Gestures V2: MIDI BLE Gestural Glove
+// https://github.com/sneak-thief/Sneaky-Gestures-V2
+// LED display handler
+// ---------------------------------------------------------------------------
+
 #include "LedDisplay.h"
 
 #include <Arduino.h>
@@ -65,6 +71,12 @@ extern const unsigned long QUANTIZE_DISPLAY_MS;
 extern bool pcPresetDisplayActive;
 extern unsigned long pcPresetDisplayStartMs;
 extern const unsigned long PC_PRESET_DISPLAY_MS;
+
+// Patch save/load confirmation flash (300 ms gradient bar).
+extern bool patchConfirmActive;
+extern unsigned long patchConfirmStartMs;
+extern const unsigned long PATCH_CONFIRM_MS;
+extern int  patchConfirmKind; // 0 = save (orange->cyan), 1 = load (green->cyan)
 
 // Battery
 extern bool batteryDisplayActive;
@@ -699,17 +711,26 @@ static float lipoVoltageToCapacity(float v)
   return 1.0f;
 }
 
+// Low-battery threshold. Out of caution against power instability at low cell
+// voltages, ANY estimated capacity below this is treated as "low" and shown as
+// the flashing-red indicator (1-bar state) rather than green bars. (Raised from
+// the old implicit ~1/7 = 14% bar boundary up to a 20% safety margin.)
+static const float BATTERY_LOW_CAPACITY = 0.20f;
+
 // Convert capacity 0..1 to a bar count 0..7.
-// 0%  -> 0 bars (then we light LED 6 blinking red for any non-zero voltage)
-// >0% and < 1/7 -> 1 bar (the "low" indicator)
-// 1/7..2/7 -> 2 bars, etc.
-// >=6/7 -> 7 bars
+//   < BATTERY_LOW_CAPACITY -> 1 bar  (the flashing-red "low battery" indicator)
+//   then 2..7 green bars are spread across the remaining 20%..100% range.
 static int capacityToBars(float capacity)
 {
-  if (capacity <= 0.0f) return 1; // very-low blink state still shows 1 bar
-  // Map to 1..7 bars
-  int bars = (int)(capacity * 7.0f) + 1;
-  if (bars < 1) bars = 1;
+  if (capacity < BATTERY_LOW_CAPACITY) return 1; // low: flashing-red state
+
+  // Map the healthy range [BATTERY_LOW_CAPACITY .. 1.0] across 2..7 bars so the
+  // green readout still uses the full strip above the low threshold.
+  float t = (capacity - BATTERY_LOW_CAPACITY) / (1.0f - BATTERY_LOW_CAPACITY);
+  if (t < 0.0f) t = 0.0f;
+  if (t > 1.0f) t = 1.0f;
+  int bars = 2 + (int)(t * 5.0f); // 2..7
+  if (bars < 2) bars = 2;
   if (bars > 7) bars = 7;
   return bars;
 }
@@ -1180,6 +1201,26 @@ static void renderOrangeFlash(uint8_t out[7][3])
   }
 }
 
+// Patch save/load confirmation: a static gradient bar across the 7 LEDs.
+//   kind 0 (save) : LED 0 orange -> LED 6 cyan
+//   kind 1 (load) : LED 0 green  -> LED 6 cyan
+// Held for PATCH_CONFIRM_MS by the dispatch logic, then released.
+static void renderPatchConfirm(uint8_t out[7][3], int kind)
+{
+  // Start color depends on the action; both ramp to cyan at the far end.
+  uint8_t sr, sg, sb;
+  if (kind == 1) { sr = 0;   sg = 255; sb = 0;   } // load: green
+  else           { sr = 255; sg = 110; sb = 0;   } // save: orange
+  const uint8_t er = 0, eg = 200, eb = 255;        // cyan
+
+  for (int i = 0; i < 7; i++) {
+    float t = (float)i / 6.0f; // 0 at LED0, 1 at LED6
+    out[i][0] = (uint8_t)(sr + t * ((int)er - (int)sr));
+    out[i][1] = (uint8_t)(sg + t * ((int)eg - (int)sg));
+    out[i][2] = (uint8_t)(sb + t * ((int)eb - (int)sb));
+  }
+}
+
 // Gaussian-like profile for the moving ripple peak.
 // Returns 0..1 brightness for an LED that is `delta` LEDs away from the peak.
 // Sigma = 0.9 gives:  delta=0 -> 1.0,  delta=1 -> 0.54,  delta=2 -> 0.085
@@ -1393,6 +1434,11 @@ void UpdateFingerLeds()
     pcPresetDisplayActive = false;
   }
 
+  // Expire the patch save/load confirmation flash.
+  if (patchConfirmActive && (now - patchConfirmStartMs) >= PATCH_CONFIRM_MS) {
+    patchConfirmActive = false;
+  }
+
   static bool lastFrameWasBlack = false;
   static uint8_t prevPix[7][3] = {{0}};
   static uint8_t curPix[7][3];
@@ -1404,7 +1450,18 @@ void UpdateFingerLeds()
   bool changed = false;
   bool anyNonZero = false;
 
-  if (pcPresetDisplayActive) {
+  if (patchConfirmActive) {
+    // Top priority: brief 300 ms gradient bar confirming a patch save or load.
+    // Save = orange->cyan, Load = green->cyan.
+    renderPatchConfirm(curPix, patchConfirmKind);
+    for (int i = 0; i < 7; i++) {
+      if (curPix[i][0] != prevPix[i][0] || curPix[i][1] != prevPix[i][1] ||
+          curPix[i][2] != prevPix[i][2] || curPixW[i] != prevPixW[i]) {
+        changed = true;
+      }
+      if (curPix[i][0] || curPix[i][1] || curPix[i][2] || curPixW[i]) anyNonZero = true;
+    }
+  } else if (pcPresetDisplayActive) {
     // Highest priority: brief preset-bar shown when a MIDI Program Change loads
     // a preset. Overrides all other LED states for PC_PRESET_DISPLAY_MS. Uses
     // the same 63-color-band rendering as the browser (reads selectedPreset,
