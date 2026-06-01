@@ -152,8 +152,12 @@ are rejected on load.
 
 ├── src/
 │   ├── main.cpp                                firmware entry: input scan, MIDI, BLE, presets
-│   ├── LedDisplay.{h,cpp}                      LED rendering module
 │   ├── DebugSerial.h                           debug-print macros
+│   ├── LedDisplay.{h,cpp}                      LED rendering module
+│   ├── ScaleQuant.h                            Scale quantizing module
+│   ├── GloveState.{h,cpp}                      Glove state module
+│   ├── TempoControl.{h,cpp}                    Tempo control module
+│   ├── Presets.{h,cpp}                         Preset patch handling module
 │   └── TempoPitchShifter.{h,cpp}               inlined pitch-bend math library
 ├── hardware/
 │   ├── README.md                               Bill of Materials
