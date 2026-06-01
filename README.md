@@ -31,6 +31,10 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 - **Tempo-tracking pitch bend** — automatically retunes to the host's clock
   so samples stay in pitch when the project tempo changes
 - **63 presets** persisted to onboard flash; MIDI Program Change recalls them
+- **Save / load confirmation flash** — a 300 ms LED bar confirms each preset
+  write (orange→cyan) and recall (green→cyan)
+- **Serial patch backup/restore** — dump every preset to the USB serial console
+  and paste them back, each line CRC-checked before it's written to flash
 - **Per-channel and global stuck-note prevention** for reliable BLE-MIDI
 - **Quantization grids** for both finger notes and flex notes (off / 1/8 /
   1/16 / 1/32), locked to internal tempo or external MIDI clock
@@ -110,6 +114,32 @@ Documented in detail:
 - User guide [README.md](documentation/README.md)
 - LED display [LED_Mode_Reference.html](https://htmlpreview.github.io/?https://github.com/sneak-thief/Sneaky-Gestures-V2/blob/main/documentation/LED_Mode_Reference.html)
 
+## Serial patch backup & restore
+
+Presets can be backed up and restored over the USB serial monitor (115200 baud),
+independent of any BLE host. Each patch is emitted as one self-contained
+`PATCH <slot> <base64>` line with an embedded CRC32, so a corrupted paste is
+rejected before it ever touches flash.
+
+| Command | Action |
+|---------|--------|
+| `HELP` | List the commands |
+| `LIST` | Show which slots hold a valid patch |
+| `DUMP` | Print a `PATCH` line for every non-empty slot (bulk backup) |
+| `DUMP <n>` | Dump just slot `n` |
+| `LOAD <slot> <base64>` | Restore a pasted line to that slot (CRC + magic + version checked) |
+| `FORMAT YES` | Reformat the filesystem (erases all patches) |
+
+**Backup:** type `DUMP`, copy the `PATCH` lines out of the terminal, save them to
+a file. **Restore:** paste a line back as `LOAD 0 <base64>`. Dump presets
+*before* flashing firmware that bumps the patch version, as old-version patches
+are rejected on load.
+
+> A `FACTORY_RESET` build flag in `main.cpp`, when set to `1`, reformats internal
+> flash on boot — clearing both all presets and the BLE bonding data — as a
+> recovery path for corrupted flash or "advertises but won't connect" pairing
+> issues. Set it back to `0` and reflash afterward.
+
 ## Repository layout
 
 ```
@@ -136,3 +166,15 @@ Documented in detail:
 └── README.md                                   this file
 
 ```
+
+## History
+
+The original wired Sneaky Gestures V1 was first developed in 2012 and based on the [ACSensorizer](https://www.midibox.org/dokuwiki/acsensorizer_04)  / [MIDIbox](https://www.ucapps.de/) platform:
+
+Development thread for V1:
+- [https://forum.midibox.org/t/ac-sensorizer-glove/16883](https://forum.midibox.org/t/ac-sensorizer-glove/16883)
+
+I perfomed live on tour with V1 for a year for my [Sneak-Thief](https://sneak-thief.com) project. V2 replicates most of the features of V1, with the obvious addition of BLE, LEDs, 12 notes instead of 8 and modal controls directly on the glove. V2 will be used live for my post-industrial / EBM project, [INVOLUCIJA](https://involucija.org). Follow updates here - [https://instagram.com/invo.lucija/](https://www.instagram.com/invo.lucija/).    
+
+Fun fact: Imogen Heap's team for her MiMu gloves referenced Sneaky Gestures V1 in their [development blog](https://theglovesproject.com/data-gloves-overview/).
+  
