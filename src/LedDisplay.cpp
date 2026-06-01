@@ -1,11 +1,12 @@
 /*****************************************************************************/
 // Sneaky Gestures V2: MIDI BLE Gestural Glove
 // https://github.com/sneak-thief/Sneaky-Gestures-V2
-// LED display handler
+//
+// LED display handler / animation module
+//
 // ---------------------------------------------------------------------------
 
 #include "LedDisplay.h"
-
 #include <Arduino.h>
 #include <math.h>
 #include <light_CD74HC4067.h>

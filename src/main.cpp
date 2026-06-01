@@ -1,18 +1,20 @@
 /*****************************************************************************/
 // Sneaky Gestures V2: MIDI BLE Gestural Glove
 // https://github.com/sneak-thief/Sneaky-Gestures-V2
+//
 // Target: Seeed XIAO nRF52840 Sense  |  Framework: Adafruit nRF52 BSP
 // ---------------------------------------------------------------------------
+//
 // A wearable MIDI controller transmitting over BLE. The thumb makes contact
 // with conductive pads on the fingers, read via a 74HC4067 16-channel mux.
 //
-// INPUTS
+// INPUTS 0-15
 //   Channels 3-14 : 12 finger-pad note buttons (pinky base=low, index tip=high)
 //   Channel 0     : Octave up   (release) / hold 1s = tap tempo mode
 //   Channel 1     : Octave down (release) / hold 1s = note quantize cycle
 //   Channel 2     : Index modal (hold = flex sensor notes + AccelY CC)
 //   Channel 15    : Pinky palm  (tap = spread cycle / hold 1s = scale cycle)
-//   A1            : Thumb FSR   → aftertouch (500ms after NoteOn)
+//   A1            : Thumb FSR   → aftertouch (AFTERTOUCH_DELAY_MS = 30ms after NoteOn)
 //   A2            : Index flex  → quantized notes + LED bar while ch2 held
 //   IMU           : AccelX→CC74, AccelY→CC71, double-tap→battery display
 //
@@ -49,6 +51,10 @@
 #include <InternalFileSystem.h>     // nRF52 internal flash filesystem (Adafruit BSP)
 #include "TempoPitchShifter.h"      // tempo->pitch-bend retune helper
 #include "LedDisplay.h"             // LED strip rendering / animation module
+#include "GloveState.h"             // shared musical/tempo/preset globals (extern)
+#include "ScaleQuant.h"             // scales, pitch mapping, key spread, quantize grids
+#include "TempoControl.h"           // setTempo()
+#include "Presets.h"                // patch persistence + serial console
 using namespace Adafruit_LittleFS_Namespace;
 
 #include "DebugSerial.h"   // DBG_* / BOOT_* logging macros (shared)
@@ -70,8 +76,8 @@ using namespace Adafruit_LittleFS_Namespace;
 // channel 7 in the preset browser through 7 levels. BRIGHTNESS is the default
 // applied at boot before any preset is loaded.
 #define BRIGHTNESS 30
-// 7 selectable brightness levels: off, 10, 30, 60, 120, 180, 255.
-extern const uint8_t BRIGHTNESS_LEVELS[7] = {0, 10, 30, 60, 120, 180, 255};
+// 7 selectable brightness levels: off, 10, 30, 60, 100, 180, 255.
+extern const uint8_t BRIGHTNESS_LEVELS[7] = {0, 10, 30, 60, 100, 180, 255};
 extern const int BRIGHTNESS_LEVEL_COUNT = 7;
 int brightnessLevel = 2; // index into BRIGHTNESS_LEVELS (2 = 30, matches BRIGHTNESS)
 // Set true when something changes the global strip brightness (which does NOT
@@ -83,6 +89,20 @@ volatile bool ledForceRepush = false;
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
 #endif // NEOPIXEL_ENABLED for NEOPIXEL Animations
+
+// Apply a brightness level (index into BRIGHTNESS_LEVELS) to the LED strip.
+// Defined here so the Presets module can restore brightness on patch load
+// without pulling in the NeoPixel dependency. No-op when LEDs are disabled.
+void applyStripBrightness(int level)
+{
+#ifdef NEOPIXEL_ENABLED
+  if (level < 0) level = 0;
+  if (level >= BRIGHTNESS_LEVEL_COUNT) level = BRIGHTNESS_LEVEL_COUNT - 1;
+  strip.setBrightness(BRIGHTNESS_LEVELS[level]);
+#else
+  (void)level;
+#endif
+}
 
 
 
@@ -99,6 +119,9 @@ BLEMidi blemidi;
 // Create a new instance of the Arduino MIDI Library, and attach BluefruitLE MIDI as the transport.
 MIDI_CREATE_BLE_INSTANCE(blemidi);
 
+// -----------------------------------------------------------------------------
+// MIDI Handling
+// -----------------------------------------------------------------------------
 
 
 // MIDI defaults
@@ -120,16 +143,16 @@ const int FSR_AFTERTOUCH_THRESHOLD = 50; // raw ADC counts; below this = treat a
 // octave 4 -> +12
 // octave 5 -> +24
 // octave 6 -> +36 semitones (3 octaves up)
-const signed int OCTAVE_OFFSETS[7] = {-36, -24, -12, 0, 12, 24, 36};
+extern const signed int OCTAVE_OFFSETS[7] = {-36, -24, -12, 0, 12, 24, 36};
 extern const int OCTAVE_DEFAULT = 3;
-const int OCTAVE_MAX_INDEX = 6;
+extern const int OCTAVE_MAX_INDEX = 6;
 int octave = OCTAVE_DEFAULT;
 
 // keyTranspose: direct semitone shift applied to the output pitch AFTER scale
 // quantization. Adjusted by channels 3↑ / 6↓ during tap-tempo mode.
 // Centre LED shows WHITE in the tap-tempo display. Clamped to [-5..+5].
-const int KEY_TRANSPOSE_MIN = -5;
-const int KEY_TRANSPOSE_MAX =  5;
+extern const int KEY_TRANSPOSE_MIN = -5;
+extern const int KEY_TRANSPOSE_MAX =  5;
 int keyTranspose = 0;
 
 // rootTranspose: rotates the scale DEGREES by N positions (mode rotation).
@@ -140,8 +163,8 @@ int keyTranspose = 0;
 // internally so values beyond the scale length still produce a valid rotation.
 // Adjusted by channels 9↑ / 12↓ during tap-tempo mode. Centre LED shows BLUE
 // in the tap-tempo display.
-const int ROOT_TRANSPOSE_MIN = -5;
-const int ROOT_TRANSPOSE_MAX =  5;
+extern const int ROOT_TRANSPOSE_MIN = -5;
+extern const int ROOT_TRANSPOSE_MAX =  5;
 int rootTranspose = 0;
 
 // Tracks which transpose sub-mode was last used during tap-tempo, to set the
@@ -193,19 +216,6 @@ unsigned long noteQuantizeNextGridMs = 0; // Next grid tick timestamp
 // Per-channel pending NoteOn slot. -1 = no NoteOn pending.
 int pendingNoteChannel[16];
 bool pendingNotePresent[16] = {false};
-
-// Return the quantize interval in ms for the current mode, or 0 if off.
-// `tempo` is declared further down -- forward declare so we can use it here.
-extern int tempo;
-static unsigned long noteQuantizeIntervalMs()
-{
-  if (noteQuantizeMode == NQ_OFF) return 0;
-  unsigned long beatMs = 60000UL / (unsigned long)tempo;
-  if (noteQuantizeMode == NQ_1_8)  return beatMs / 2UL;    // 2 eighths per beat
-  if (noteQuantizeMode == NQ_1_16) return beatMs / 4UL;    // 4 sixteenths per beat
-  if (noteQuantizeMode == NQ_1_32) return beatMs / 8UL;    // 8 thirty-seconds per beat
-  return 0;
-}
 
 // -----------------------------------------------------------------------------
 // Battery monitoring (Seeed XIAO nRF52840 Sense)
@@ -261,139 +271,9 @@ float batteryBootVoltage = 0.0f;
 bool batteryBootCharging = false;
 int batteryBootBars = 0; // 0..7
 
-// ---------------------------------------------------------------------------
-// Scale-degree button mapping (Option B deduplication).
-//
-// Instead of mapping all 12 buttons chromatically and relying on harmonize()
-// to snap them to scale pitches (which produces repeated notes), we derive
-// the ordered set of distinct pitch offsets for the current scale, then assign
-// each button a unique scale position. Buttons beyond the scale's note count
-// wrap into the next octave, so every button always produces a distinct pitch.
-// ---------------------------------------------------------------------------
-
-// Total number of scales (0 = no quantization, 1-19 = named scales).
-#define SCALE_MAX 20
-
-// Chromatic->scale mapping: 20 scales x 12 semitones.
-// Each entry is the semitone offset within the octave that the chromatic input
-// maps to (floor snap to nearest lower scale degree).
-static const uint8_t scale_chromatic_map[SCALE_MAX][12] = {
-  { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11}, // 0 not harmonized
-  { 0, 0, 2, 4, 4, 5, 5, 7, 9, 9,11,11}, // 1 Major
-  { 0, 0, 2, 3, 3, 5, 5, 7, 8, 8,10,10}, // 2 Natural Minor
-  { 0, 0, 2, 3, 3, 5, 5, 7, 8, 8,11,11}, // 3 Harmonic Minor
-  { 0, 0, 3, 3, 5, 5, 6, 7, 7,10,10,10}, // 4 Blues Minor
-  { 0, 0, 3, 3, 4, 4, 7, 7, 9, 9,10,10}, // 5 Blues Major
-  { 0, 2, 2, 3, 3, 5, 5, 7, 7, 9,10,10}, // 6 Dorian
-  { 0, 0, 2, 2, 5, 5, 5, 7, 7, 7,10,10}, // 7 Japanese
-  { 0, 1, 1, 1, 5, 5, 5, 7, 7, 7,10,10}, // 8 Japanese Diminished
-  { 0, 2, 2, 3, 3, 3, 7, 7, 7, 9, 9, 9}, // 9 Kumoi
-  { 0, 0, 2, 2, 4, 4, 6, 7, 7, 9, 9,11}, //10 Lydian
-  { 0, 1, 1, 3, 3, 5, 6, 6, 8, 8,10,10}, //11 Locrian
-  { 0, 0, 2, 3, 3, 6, 6, 7, 7, 9,10,10}, //12 Mi-Sheberach
-  { 0, 0, 2, 2, 4, 5, 5, 7, 7, 9,10,10}, //13 Mixolydian
-  { 0, 1, 1, 3, 3, 3, 7, 7, 8, 8, 8, 8}, //14 Pelog
-  { 0, 0, 2, 2, 2, 5, 5, 7, 7, 7,10,10}, //15 Pentatonic Neutral
-  { 0, 0, 3, 3, 5, 5, 6, 7, 7, 7,10,10}, //16 Pentatonic Blues
-  { 0, 0, 2, 2, 4, 4, 7, 7, 7, 9, 9, 9}, //17 Pentatonic Major
-  { 0, 0, 3, 3, 5, 5, 5, 7, 7, 7,10,10}, //18 Pentatonic Minor
-  { 0, 1, 1, 3, 3, 5, 5, 7, 8, 8,10,10}  //19 Phrygian
-};
-
-// Extract ordered distinct semitone offsets for a scale into `out[]`.
-// Returns the number of distinct degrees (N). `out` must hold at least 12.
-static int getScaleDegrees(uint8_t scaleIdx, uint8_t out[12])
-{
-  if (scaleIdx == 0 || scaleIdx >= SCALE_MAX) {
-    // No harmonization: all 12 chromatic steps.
-    for (int i = 0; i < 12; i++) out[i] = i;
-    return 12;
-  }
-  int n = 0;
-  uint8_t prev = 255;
-  for (int i = 0; i < 12; i++) {
-    uint8_t v = scale_chromatic_map[scaleIdx][i];
-    if (v != prev) {
-      out[n++] = v;
-      prev = v;
-    }
-  }
-  return n;
-}
-
-// Convert a 0-based button position (0..11) to a MIDI pitch, using scale-degree
-// mapping when Scale > 0, or the original Keys[]/harmonize path when Scale == 0.
-//
-// When Scale > 0:
-//   - Extract N distinct offsets for the current scale.
-//   - NoteSpread is applied BEFORE quantization: each button advances by
-//     `Spread` scale degrees, so the raw degree index is buttonPos * Spread.
-//   - rootTranspose ROTATES the scale degrees by N positions (mode rotation):
-//     the root pitch class stays fixed, but the i-th finger gets the (i+r)-th
-//     degree of the un-rotated scale, re-anchored to the rotation's starting
-//     degree. Wrapping past the top of the scale crosses an octave.
-//   - Final pitch = RootNote_pitch_class + rotatedDegree + OCTAVE_OFFSETS[octave].
-// When Scale == 0 (no harmonization):
-//   - Use the existing Keys[]/NoteSpread path (Keys[] already bakes in Spread);
-//     rootTranspose has no effect.
-//
-// `buttonPos` is 0..11, where 0 = lowest note (pinky base) and 11 = highest
-// (index tip), matching the Keys[14-channel] layout.
-static int scaleDegreeToMidiPitch(int buttonPos)
-{
-  int pitch;
-  if (Scale == 0) {
-    // No quantization: use existing Keys[] + spread path. Keys[] has 12 slots;
-    // callers may probe higher buttonPos values (e.g. the flex candidate scan),
-    // so clamp the index to stay in bounds. Out-of-range positions saturate to
-    // the top key rather than reading past the array.
-    int idx = buttonPos;
-    if (idx < 0) idx = 0;
-    if (idx > 11) idx = 11;
-    pitch = (int)Keys[idx] + OCTAVE_OFFSETS[octave];
-  } else {
-    uint8_t degrees[12];
-    int n = getScaleDegrees((uint8_t)Scale, degrees);
-
-    // Apply NoteSpread: each button steps `Spread` scale degrees. Spread 1 =
-    // consecutive scale degrees; Spread 2 = every other degree; etc. The
-    // resulting index wraps into octaves.
-    int spreadStep = (int)Spread;
-    if (spreadStep < 1) spreadStep = 1;
-    int degreeIndex = buttonPos * spreadStep;
-
-    // rootTranspose = MODE rotation of the scale degrees. The root pitch class
-    // stays fixed; finger 0 still plays the root, but the intervals between
-    // fingers come from a rotated version of the degree set. Rotating C major
-    // by +1 gives Dorian intervals starting on C; by +2 gives Phrygian; etc.
-    //
-    // Math: let r be the rotation in [0, n). The i-th rotated degree is the
-    // (i+r)-th element of the original scale, re-anchored to the rotation's
-    // starting degree. Wrapping past the top of the scale crosses an octave.
-    //   rotIdx     = (i + r) mod n
-    //   octShift   = ((i + r) / n) * 12     // octaves crossed by wrapping
-    //   rotatedDeg = degrees[rotIdx] - degrees[r] + octShift     (mod 12 if negative)
-    int r = rootTranspose % n;
-    if (r < 0) r += n;
-
-    int totalIdx = degreeIndex + r;
-    int rotIdx   = totalIdx % n;
-    int octShift = (totalIdx / n) * 12;
-    int rotatedDeg = (int)degrees[rotIdx] - (int)degrees[r] + octShift;
-    if (rotatedDeg < 0) rotatedDeg += 12; // safety; shouldn't trigger with r in [0,n)
-
-    int rootPitchClass = (int)(RootNote % 12);
-    int rootOctave     = (int)(RootNote / 12) * 12;
-
-    pitch = rootOctave + rootPitchClass + rotatedDeg + OCTAVE_OFFSETS[octave];
-  }
-
-  // (keyTranspose is applied by callers, not here, to avoid double-application.)
-
-  if (pitch < 0) pitch = 0;
-  if (pitch > 127) pitch = 127;
-  return pitch;
-}
+// -----------------------------------------------------------------------------
+// Accelerometer X/Y handling
+// -----------------------------------------------------------------------------
 
 // Accelerometer variables
 float rawAccelX;                          // Raw IMU data X
@@ -401,10 +281,10 @@ float rawAccelY;                          // Raw IMU data Y
 float rawAccelZ;                          // Raw IMU data Z
 unsigned int AccelX;                      // Scaled IMU data X
 unsigned int AccelY;                      // Scaled IMU data Y
-// - unsigned int AccelZ;                 // Z axis - not needed for MIDI CC
+// - unsigned int AccelZ;                 // Z axis - not needed for MIDI CC (yet)
 unsigned int lastAccelX;                  // Previous IMU reading
 unsigned int lastAccelY;
-// - unsigned int lastAccelZ;             // Z axis - not needed for MIDI CC
+// - unsigned int lastAccelZ;             // Z axis - not needed for MIDI CC (yet)
 unsigned long lastExecutionTimeAccel = 0; // Timer for sending IMU MIDI CC's
 const unsigned long intervalAccel = 25;   // Send IMU MIDI CC's every X ms
 unsigned int CCAccelX = 74;               // Default: Set IMU X axis to MIDI CC 74
@@ -412,6 +292,12 @@ unsigned int CCAccelY = 1;                // Default: Set IMU Y axis to MIDI CC 
 // CC mapping swap (toggled by ch4 in the tap-tempo menu). When true, CCAccelX
 // and CCAccelY are exchanged so Y sends CC74 and X sends CC1.
 bool ccSwapped = false;
+
+
+// -----------------------------------------------------------------------------
+// Flex and FSR analog input handling
+// -----------------------------------------------------------------------------
+
 
 // Temporary variables for processing analog inputs (Index finger Flex sensor and Thumb FSR pressure sensor)
 int indexFLEX = 2;                        // analog pin A2
@@ -453,17 +339,6 @@ unsigned long flexNextGridMs = 0; // Timestamp of next grid tick (millis())
 int pendingFlexNote = -1;         // Note value waiting to be sent at next tick (-1 = none)
 bool pendingFlexNoteOff = false;  // True when a NoteOff is queued for next tick
 
-// Return the flex-quantize interval in ms for the current mode, or 0 if OFF.
-static unsigned long flexQuantizeIntervalMs()
-{
-  if (flexQuantizeMode == FQ_OFF) return 0;
-  unsigned long beatMs = 60000UL / (unsigned long)tempo;
-  if (flexQuantizeMode == FQ_1_8)  return beatMs / 2UL;
-  if (flexQuantizeMode == FQ_1_16) return beatMs / 4UL;
-  if (flexQuantizeMode == FQ_1_32) return beatMs / 8UL;
-  return 0;
-}
-
 // Pinky palm (channel 15) press tracking. A short press toggles Spread on
 // release; a hold of >= PINKY_SCALE_HOLD_MS cycles the Scale once at the
 // 1 s mark and suppresses the on-release Spread toggle.
@@ -499,9 +374,26 @@ float flexPulseBaseW = 0.0f; // accumulator for stacked pulses (float so it can 
 // Global tempo (BPM). Drives flex-note quantization and the tap-tempo blink.
 // Settable via the tap-tempo feature (octave-up hold + 8 taps), or via
 // incoming MIDI clock (which takes precedence when active).
-const int TEMPO_MIN = 40;
-const int TEMPO_MAX = 240;
+extern const int TEMPO_MIN = 40;
+extern const int TEMPO_MAX = 240;
 int tempo = 120;
+
+
+// FSR Aftertouch settings (velocity sensitivity removed - using fixed velocity 100)
+const int FSR_RAW_MAX = 550;                     // Max expected raw ADC value from the thumb FSR
+const unsigned long AFTERTOUCH_DELAY_MS = 30;   // Wait this long after NoteOn before sending aftertouch
+const unsigned long AFTERTOUCH_INTERVAL_MS = 20; // Min interval between aftertouch updates
+
+// Per-note aftertouch tracking. A note is "active" while its contact is held.
+// noteOnTime[ch] = millis() of the NoteOn for channel ch (used to gate the 50 ms delay).
+unsigned long noteOnTime[16] = {0};
+bool noteActive[16] = {false};            // Currently held (NoteOn sent, NoteOff not yet)
+// Pitch sent in the most recent NoteOn for each channel. NoteOff sends the
+// SAME pitch back so that Scale / Spread / Octave changes between press and
+// release can't strand a different MIDI note on the synth.
+byte noteActivePitch[16] = {0};
+unsigned long lastAftertouchSendTime = 0; // Last time any aftertouch was sent
+int lastAftertouchValue = -1;             // Last aftertouch value sent (-1 = none yet)
 
 // -----------------------------------------------------------------------------
 // Tempo-tracking pitch bend (preset feature, toggled by ch8 in the browser).
@@ -517,29 +409,12 @@ int tempo = 120;
 bool  tempoBendEnabled = false;
 int   projectTempo = 120;            // saved reference tempo (rounded BPM)
 TempoPitchShifter tempoShifter;      // default +/- 4 semitone bend range
-const unsigned long TEMPO_BEND_INTERVAL_MS = 1000;
+extern const unsigned long TEMPO_BEND_INTERVAL_MS = 1000;
 unsigned long lastTempoBendMs = 0;
 int   lastSentBendTempo = -1;        // last incoming tempo we acted on (debounce)
 
-// Update tempo and derive dependent timing values. Call this any time tempo
-// changes so the flex quantization grid stays in sync.
-void setTempo(int bpm)
-{
-  if (bpm < TEMPO_MIN) bpm = TEMPO_MIN;
-  if (bpm > TEMPO_MAX) bpm = TEMPO_MAX;
-  tempo = bpm;
-  // Flex grid interval derives from the flex-quantize mode (independent of the
-  // note-quantize mode). When flex quantize is OFF the interval is 0; keep a
-  // nonzero fallback in flexQuantizeMs so the grid-advance math never divides
-  // by zero (the OFF path in FlexNoteFlush bypasses the grid anyway).
-  unsigned long fi = flexQuantizeIntervalMs();
-  flexQuantizeMs = (fi > 0) ? fi : (60000UL / (unsigned long)bpm / 4UL);
-  DBG_PRINT("Tempo set to ");
-  DBG_PRINT(tempo);
-  DBG_PRINT(" BPM, flex grid = ");
-  DBG_PRINT(flexQuantizeMs);
-  DBG_PRINTLN(" ms");
-}
+// setTempo() now lives in TempoControl.{h,cpp} (clamps to TEMPO_MIN/MAX and
+// re-derives the flex-quantize grid via ScaleQuant's flexQuantizeIntervalMs).
 
 // -----------------------------------------------------------------------------
 // Preset (patch) browser mode.
@@ -595,533 +470,21 @@ unsigned long presetScrollPressedMs[16] = {0};
 unsigned long presetScrollLastStepMs[16] = {0};
 
 // -----------------------------------------------------------------------------
-// Patch struct: the full set of recallable settings stored per preset slot.
-// Saved/loaded as a raw binary blob to a per-slot file in internal flash.
-// A version + magic guard lets us reject stale/corrupt blobs after layout
-// changes.
-// -----------------------------------------------------------------------------
-#define PATCH_MAGIC   0x47415450UL // 'PTAG'
-#define PATCH_VERSION 6            // bumped to 6: added trailing CRC32 field
-
-// -----------------------------------------------------------------------------
-// FACTORY RESET flag.
-//   Set to 1, build + flash, and power on ONCE. At boot the firmware reformats
-//   the internal-flash filesystem -- wiping ALL saved patches AND the BLE
-//   bonding data (Bluefruit stores bonds as files in the same InternalFS), then
-//   continues to boot normally. This is the fix for "advertises but won't
-//   connect" caused by corrupted bonds, and for a corrupted patch filesystem.
-//   AFTER the reset boot: set this back to 0 and reflash, or every boot wipes.
-//   Remember to also "forget"/remove the glove on the host's Bluetooth list.
-// -----------------------------------------------------------------------------
-#define FACTORY_RESET 0
-
-struct Patch {
-  uint32_t magic;
-  uint32_t version;
-  int   tempo;
-  int   octave;
-  int   keyTranspose;
-  unsigned int rootNote;
-  int   noteQuantizeMode;
-  int   flexQuantizeMode;
-  unsigned int scale;
-  unsigned int spread;
-  int   minNote;
-  int   maxNote;
-  int   brightnessLevel;
-  int   tempoBendEnabled;
-  int   ccSwapped;
-  uint32_t crc;   // CRC32 over all preceding bytes; MUST be the last field
-};
-
-// NoteSpread is defined much later but loadPatch needs it; forward-declare.
-void NoteSpread(int RootNote, int Spread, int RootNoteOffset);
-
-// -----------------------------------------------------------------------------
-// Patch persistence (internal flash via Adafruit LittleFS).
-//
-// Each slot is stored as a small binary file "/patchNN.bin". Saving overwrites
-// it; loading reads the blob, validates magic + version, and applies the fields
-// to the live globals (then calls setTempo to re-derive the flex grid).
-// -----------------------------------------------------------------------------
-static void patchPath(int slot, char out[20])
-{
-  // e.g. "/patch07.bin"
-  snprintf(out, 20, "/patch%02d.bin", slot);
-}
-
-// Standard CRC-32 (poly 0xEDB88320). Used to checksum patch blobs both in flash
-// and over the serial console.
-static uint32_t crc32_buf(const uint8_t *data, size_t len)
-{
-  uint32_t crc = 0xFFFFFFFFUL;
-  for (size_t i = 0; i < len; i++) {
-    crc ^= data[i];
-    for (int b = 0; b < 8; b++) {
-      uint32_t mask = -(crc & 1U);
-      crc = (crc >> 1) ^ (0xEDB88320UL & mask);
-    }
-  }
-  return ~crc;
-}
-
-// CRC over every byte of the Patch EXCEPT its own trailing crc field. The crc
-// field is last and the struct is all 4-byte members (no trailing padding), so
-// this is exactly sizeof(Patch) - sizeof(uint32_t) bytes from the start.
-static uint32_t patchCrc(const Patch &p)
-{
-  return crc32_buf((const uint8_t *)&p, sizeof(Patch) - sizeof(p.crc));
-}
-
-// True only if magic, version, AND the stored CRC all check out. No side effects.
-static bool patchValid(const Patch &p)
-{
-  return p.magic == PATCH_MAGIC &&
-         p.version == PATCH_VERSION &&
-         p.crc == patchCrc(p);
-}
-
-bool savePatch(int slot)
-{
-  if (slot < 0 || slot >= PRESET_COUNT) return false;
-
-  Patch p;
-  p.magic            = PATCH_MAGIC;
-  p.version          = PATCH_VERSION;
-  p.tempo            = tempo;
-  p.octave           = octave;
-  p.keyTranspose     = keyTranspose;
-  p.rootNote         = RootNote;
-  p.noteQuantizeMode = noteQuantizeMode;
-  p.flexQuantizeMode = flexQuantizeMode;
-  p.scale            = Scale;
-  p.spread           = Spread;
-  p.minNote          = minNote;
-  p.maxNote          = maxNote;
-  p.brightnessLevel  = brightnessLevel;
-  p.tempoBendEnabled = tempoBendEnabled ? 1 : 0;
-  p.ccSwapped        = ccSwapped ? 1 : 0;
-  p.crc              = patchCrc(p);   // checksum over all preceding fields
-
-  char path[20];
-  patchPath(slot, path);
-
-  // Remove any existing file first so we overwrite cleanly.
-  InternalFS.remove(path);
-
-  File f(InternalFS);
-  if (!f.open(path, FILE_O_WRITE)) {
-    DBG_PRINT("savePatch: open failed for ");
-    DBG_PRINTLN(path);
-    return false;
-  }
-  size_t wrote = f.write((const uint8_t *)&p, sizeof(p));
-  f.close();
-
-  if (wrote != sizeof(p)) {
-    DBG_PRINT("savePatch: short write ");
-    DBG_PRINTLN(wrote);
-    return false;
-  }
-  DBG_PRINT("Patch saved to slot ");
-  DBG_PRINTLN(slot);
-  // The saved tempo becomes the new project reference for tempo-bend tracking.
-  projectTempo = tempo;
-  lastSentBendTempo = -1;
-  return true;
-}
-
-// Validate a patch blob and apply it to the live globals (with defensive
-// clamps). Shared by loadPatch() (reads from flash) and the serial console
-// loader (reads from a pasted Base64 line), so both paths validate identically.
-bool applyPatch(const Patch &p)
-{
-  if (!patchValid(p)) {
-    return false;
-  }
-
-  // Apply to live globals.
-  octave           = p.octave;
-  if (octave < 0) octave = 0;
-  if (octave > OCTAVE_MAX_INDEX) octave = OCTAVE_MAX_INDEX;
-  keyTranspose     = p.keyTranspose;
-  if (keyTranspose < KEY_TRANSPOSE_MIN) keyTranspose = KEY_TRANSPOSE_MIN;
-  if (keyTranspose > KEY_TRANSPOSE_MAX) keyTranspose = KEY_TRANSPOSE_MAX;
-  RootNote         = p.rootNote;
-  if (RootNote < 0) RootNote = 0;
-  if (RootNote > 127) RootNote = 127;
-  noteQuantizeMode = p.noteQuantizeMode;
-  if (noteQuantizeMode < 0 || noteQuantizeMode >= NQ_MODE_COUNT) noteQuantizeMode = NQ_OFF;
-  flexQuantizeMode = p.flexQuantizeMode;
-  if (flexQuantizeMode < 0 || flexQuantizeMode >= FQ_MODE_COUNT) flexQuantizeMode = FQ_OFF;
-  Scale            = p.scale;
-  if (Scale < 0 || Scale >= SCALE_MAX) Scale = 0; // bound: Scale indexes scale_chromatic_map[]
-  Spread           = p.spread;
-  if (Spread < 1) Spread = 1;
-  if (Spread > 4) Spread = 4;
-  minNote          = p.minNote;
-  maxNote          = p.maxNote;
-  // Keep the flex endpoints sane and ordered (min < max, within MIDI range).
-  if (minNote < 0) minNote = 0;
-  if (maxNote > 127) maxNote = 127;
-  if (minNote >= maxNote) { minNote = 48; maxNote = 84; }
-  brightnessLevel  = p.brightnessLevel;
-  if (brightnessLevel < 0) brightnessLevel = 0;
-  if (brightnessLevel >= BRIGHTNESS_LEVEL_COUNT) brightnessLevel = BRIGHTNESS_LEVEL_COUNT - 1;
-  tempoBendEnabled = (p.tempoBendEnabled != 0);
-  // Restore the CC74/CC1 axis-swap mapping. Set the CC numbers absolutely from
-  // the saved flag (rather than toggling) so the result is correct regardless
-  // of the current live mapping.
-  ccSwapped = (p.ccSwapped != 0);
-  if (ccSwapped) { CCAccelX = 1;  CCAccelY = 74; }
-  else           { CCAccelX = 74; CCAccelY = 1;  }
-  // The loaded preset's tempo is the project reference the sample was made at.
-  projectTempo = p.tempo;
-  lastSentBendTempo = -1;
-
-  // Rebuild the chromatic Keys[] from the restored spread, and re-derive the
-  // flex grid from the restored tempo + flex-quantize mode.
-  NoteSpread(RootNote, Spread, RootNoteOffset);
-  setTempo(p.tempo);
-  noteQuantizeNextGridMs = 0; // re-align the note grid in the (possibly new) mode
-#ifdef NEOPIXEL_ENABLED
-  strip.setBrightness(BRIGHTNESS_LEVELS[brightnessLevel]); // apply restored brightness
-#endif
-
-  DBG_PRINTLN("Patch applied");
-  return true;
-}
-
-bool loadPatch(int slot)
-{
-  if (slot < 0 || slot >= PRESET_COUNT) return false;
-
-  char path[20];
-  patchPath(slot, path);
-
-  File f(InternalFS);
-  if (!f.open(path, FILE_O_READ)) {
-    DBG_PRINT("loadPatch: no patch in slot ");
-    DBG_PRINTLN(slot);
-    return false;
-  }
-  Patch p;
-  size_t got = f.read((uint8_t *)&p, sizeof(p));
-  f.close();
-
-  if (got != sizeof(p)) {
-    DBG_PRINT("loadPatch: invalid/empty patch in slot ");
-    DBG_PRINTLN(slot);
-    return false;
-  }
-  if (!applyPatch(p)) {
-    DBG_PRINT("loadPatch: bad magic/version in slot ");
-    DBG_PRINTLN(slot);
-    return false;
-  }
-  DBG_PRINT("Patch loaded from slot ");
-  DBG_PRINTLN(slot);
-  return true;
-}
-
-// Arm the brief save/load confirmation flash (a 300 ms gradient bar).
-//   loaded == false -> SAVE confirmation (orange -> cyan)
-//   loaded == true  -> LOAD confirmation (green  -> cyan)
-void TriggerPatchConfirm(bool loaded)
-{
-  patchConfirmKind    = loaded ? 1 : 0;
-  patchConfirmStartMs = millis();
-  patchConfirmActive  = true;
-}
-
-// -----------------------------------------------------------------------------
-// Serial patch console.
-//
-// An interactive, host-independent way to back up and restore presets over the
-// USB serial monitor (115200 baud). Each patch is emitted as one self-contained
-// line so it can be copied straight out of the terminal and pasted back later:
-//
-//     PATCH <slot> <base64-of-(Patch bytes + CRC32)>
-//
-// The trailing CRC32 lets the loader reject a corrupted/garbled paste before it
-// ever touches flash. Commands (type into the serial monitor, newline-terminated):
-//
-//     HELP            list commands
-//     LIST            show which slots contain a valid patch
-//     DUMP            print PATCH lines for every non-empty slot
-//     DUMP <n>        print the PATCH line for slot n
-//     LOAD <line>     decode a pasted "<slot> <base64>" and write it to that slot
-//     FORMAT YES      reformat the LittleFS filesystem (erases all patches)
-//
-// The console is serviced from loop() ABOVE the BLE gate, so it works whether or
-// not a MIDI host is connected.
+// Preset persistence (Patch struct, PATCH_MAGIC/VERSION, FACTORY_RESET), the
+// save/load/apply path, the patch-confirm trigger, and the serial patch console
+// now live in Presets.{h,cpp}. NoteSpread() lives in ScaleQuant.{h,cpp}.
+// The shared globals those modules read/write are defined here in main.cpp and
+// declared extern via GloveState.h / Presets.h.
 // -----------------------------------------------------------------------------
 
-// Case-insensitive check that `s` begins with command word `kw` (length n).
-// Avoids depending on POSIX strncasecmp being transitively included.
-static bool cmdIs(const char *s, const char *kw, size_t n)
-{
-  for (size_t i = 0; i < n; i++) {
-    char a = s[i], b = kw[i];
-    if (a >= 'a' && a <= 'z') a -= 32;
-    if (b >= 'a' && b <= 'z') b -= 32;
-    if (a != b) return false;
-  }
-  return true;
-}
 
-static const char B64[] =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-// Encode len bytes of src into dst (must hold ceil(len/3)*4 + 1 chars). NUL-term.
-static void base64_encode(const uint8_t *src, size_t len, char *dst)
-{
-  size_t o = 0;
-  for (size_t i = 0; i < len; i += 3) {
-    uint32_t n = (uint32_t)src[i] << 16;
-    int rem = (int)(len - i);
-    if (rem > 1) n |= (uint32_t)src[i + 1] << 8;
-    if (rem > 2) n |= (uint32_t)src[i + 2];
-    dst[o++] = B64[(n >> 18) & 0x3F];
-    dst[o++] = B64[(n >> 12) & 0x3F];
-    dst[o++] = (rem > 1) ? B64[(n >> 6) & 0x3F] : '=';
-    dst[o++] = (rem > 2) ? B64[n & 0x3F]        : '=';
-  }
-  dst[o] = '\0';
-}
-
-static int b64val(char c)
-{
-  if (c >= 'A' && c <= 'Z') return c - 'A';
-  if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-  if (c >= '0' && c <= '9') return c - '0' + 52;
-  if (c == '+') return 62;
-  if (c == '/') return 63;
-  return -1; // '=' or invalid
-}
-
-// Decode a Base64 string into dst (capacity dstCap). Returns decoded byte count,
-// or -1 on malformed input / overflow. Ignores trailing '=' padding.
-static int base64_decode(const char *src, uint8_t *dst, size_t dstCap)
-{
-  int acc = 0, bits = 0;
-  size_t o = 0;
-  for (const char *p = src; *p; p++) {
-    if (*p == '=' || *p == '\r' || *p == '\n' || *p == ' ') continue;
-    int v = b64val(*p);
-    if (v < 0) return -1;
-    acc = (acc << 6) | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      if (o >= dstCap) return -1;
-      dst[o++] = (uint8_t)((acc >> bits) & 0xFF);
-    }
-  }
-  return (int)o;
-}
-
-// Read slot's raw Patch bytes from flash into p. Returns true only if the file
-// exists, is the right size, and is fully valid (magic + version + CRC).
-static bool readPatchBytes(int slot, Patch &p)
-{
-  if (slot < 0 || slot >= PRESET_COUNT) return false;
-  char path[20];
-  patchPath(slot, path);
-  File f(InternalFS);
-  if (!f.open(path, FILE_O_READ)) return false;
-  size_t got = f.read((uint8_t *)&p, sizeof(p));
-  f.close();
-  if (got != sizeof(p)) return false;
-  return patchValid(p);
-}
-
-// Write raw Patch bytes to a slot file (overwrites). Returns true on success.
-static bool writePatchBytes(int slot, const Patch &p)
-{
-  if (slot < 0 || slot >= PRESET_COUNT) return false;
-  char path[20];
-  patchPath(slot, path);
-  InternalFS.remove(path);
-  File f(InternalFS);
-  if (!f.open(path, FILE_O_WRITE)) return false;
-  size_t wrote = f.write((const uint8_t *)&p, sizeof(p));
-  f.close();
-  return wrote == sizeof(p);
-}
-
-// Print one "PATCH <slot> <base64>" line. The Patch struct already carries its
-// own trailing CRC32, so the encoded blob is just the struct bytes; the loader
-// recomputes and checks that CRC on the way back in.
-static void printPatchLine(int slot, const Patch &p)
-{
-  char b64[((sizeof(Patch) + 2) / 3) * 4 + 1];
-  base64_encode((const uint8_t *)&p, sizeof(Patch), b64);
-
-  Serial.print("PATCH ");
-  Serial.print(slot);
-  Serial.print(' ');
-  Serial.println(b64);
-}
-
-static void consoleDumpSlot(int slot)
-{
-  Patch p;
-  if (readPatchBytes(slot, p)) {
-    printPatchLine(slot, p);
-  } else {
-    Serial.print("; slot ");
-    Serial.print(slot);
-    Serial.println(" empty/invalid");
-  }
-}
-
-static void consoleDumpAll()
-{
-  Serial.println("; ---- patch dump begin ----");
-  int found = 0;
-  for (int s = 0; s < PRESET_COUNT; s++) {
-    Patch p;
-    if (readPatchBytes(s, p)) { printPatchLine(s, p); found++; }
-  }
-  Serial.print("; ---- patch dump end (");
-  Serial.print(found);
-  Serial.println(" patches) ----");
-}
-
-static void consoleList()
-{
-  Serial.println("; slots with a valid patch:");
-  int found = 0;
-  for (int s = 0; s < PRESET_COUNT; s++) {
-    Patch p;
-    if (readPatchBytes(s, p)) {
-      Serial.print(";   slot ");
-      Serial.print(s);
-      Serial.print("  tempo=");
-      Serial.print(p.tempo);
-      Serial.print(" scale=");
-      Serial.print(p.scale);
-      Serial.print(" oct=");
-      Serial.println(p.octave);
-      found++;
-    }
-  }
-  if (!found) Serial.println(";   (none)");
-}
-
-// Parse "<slot> <base64>" and write the decoded patch to that slot after the
-// CRC and magic/version all check out.
-static void consoleLoad(const char *args)
-{
-  while (*args == ' ') args++;
-  int slot = atoi(args);
-  // advance past the slot number and the following space(s) to the base64
-  while (*args && *args != ' ') args++;
-  while (*args == ' ') args++;
-  if (slot < 0 || slot >= PRESET_COUNT) {
-    Serial.println("; LOAD error: slot out of range (0..62)");
-    return;
-  }
-  if (!*args) {
-    Serial.println("; LOAD error: missing data");
-    return;
-  }
-
-  uint8_t buf[sizeof(Patch)];
-  int n = base64_decode(args, buf, sizeof(buf));
-  if (n != (int)sizeof(buf)) {
-    Serial.print("; LOAD error: bad length (got ");
-    Serial.print(n);
-    Serial.print(", expected ");
-    Serial.print((int)sizeof(buf));
-    Serial.println(")");
-    return;
-  }
-
-  Patch p;
-  memcpy(&p, buf, sizeof(Patch));
-  if (!patchValid(p)) {
-    // patchValid checks magic, version, and the struct's own CRC32, so this
-    // catches a corrupted paste, a wrong-version patch, or a truncated blob.
-    Serial.println("; LOAD error: invalid patch (bad CRC/magic/version) - not written");
-    return;
-  }
-  if (writePatchBytes(slot, p)) {
-    Serial.print("; LOAD ok: slot ");
-    Serial.print(slot);
-    Serial.println(" written");
-  } else {
-    Serial.print("; LOAD error: write failed for slot ");
-    Serial.println(slot);
-  }
-}
-
-static void consoleFormat(const char *args)
-{
-  while (*args == ' ') args++;
-  if (strncmp(args, "YES", 3) != 0) {
-    Serial.println("; FORMAT: type 'FORMAT YES' to confirm (erases ALL patches)");
-    return;
-  }
-  Serial.println("; formatting LittleFS...");
-  InternalFS.format();
-  if (InternalFS.begin()) Serial.println("; format complete, FS remounted");
-  else                    Serial.println("; format done but remount FAILED");
-}
-
-static void printConsoleHelp()
-{
-  Serial.println("; commands: HELP | LIST | DUMP | DUMP <n> | LOAD <slot> <b64> | FORMAT YES");
-}
-
-// Accumulate one line from Serial and dispatch it. Non-blocking: call often.
-static void serviceSerialConsole()
-{
-  static char line[256];
-  static size_t len = 0;
-
-  while (Serial.available()) {
-    char c = (char)Serial.read();
-    if (c == '\r') continue;
-    if (c == '\n') {
-      line[len] = '\0';
-      // trim leading spaces
-      char *cmd = line;
-      while (*cmd == ' ') cmd++;
-      if (*cmd) {
-        if      (cmdIs(cmd, "HELP", 4))   printConsoleHelp();
-        else if (cmdIs(cmd, "LIST", 4))   consoleList();
-        else if (cmdIs(cmd, "DUMP", 4)) {
-          const char *a = cmd + 4;
-          while (*a == ' ') a++;
-          if (*a) consoleDumpSlot(atoi(a));
-          else    consoleDumpAll();
-        }
-        else if (cmdIs(cmd, "LOAD", 4))   consoleLoad(cmd + 4);
-        else if (cmdIs(cmd, "FORMAT", 6)) consoleFormat(cmd + 6);
-        else {
-          Serial.print("; unknown command: ");
-          Serial.println(cmd);
-          printConsoleHelp();
-        }
-      }
-      len = 0;
-    } else if (len < sizeof(line) - 1) {
-      line[len++] = c;
-    } else {
-      // overflow: reset the line buffer to avoid splitting a command mid-stream
-      len = 0;
-      Serial.println("; input line too long - discarded");
-    }
-  }
-}
-
-
-const float CLOCK_EMA_ALPHA = 0.1f;            // Smoothing factor (smaller = smoother)
-const unsigned long CLOCK_TIMEOUT_MS = 2000;   // If no clock for this long, drop external lock
-const int CLOCK_MIN_SAMPLES = 8;               // Need this many pulses before we trust the EMA
-const int CLOCK_PPQN = 24;                     // MIDI standard
+// -----------------------------------------------------------------------------
+// Tempo handling
+// -----------------------------------------------------------------------------
+extern const float CLOCK_EMA_ALPHA = 0.1f;            // Smoothing factor (smaller = smoother)
+extern const unsigned long CLOCK_TIMEOUT_MS = 2000;   // If no clock for this long, drop external lock
+extern const int CLOCK_MIN_SAMPLES = 8;               // Need this many pulses before we trust the EMA
+extern const int CLOCK_PPQN = 24;                     // MIDI standard
 unsigned long lastClockMs = 0;                 // Timestamp of most recent clock pulse
 float clockEmaIntervalMs = 0.0f;               // EMA of inter-pulse interval (ms)
 int clockSampleCount = 0;
@@ -1171,23 +534,10 @@ unsigned long led4FlashUntilMs = 0;
 bool tapTempoConfirming = false;          // True after 8th tap, during confirmation
 unsigned long tapTempoConfirmEndMs = 0;
 
-// FSR Aftertouch settings (velocity sensitivity removed - using fixed velocity 100)
-const int FSR_RAW_MAX = 550;                     // Max expected raw ADC value from the thumb FSR
-const unsigned long AFTERTOUCH_DELAY_MS = 50;   // Wait this long after NoteOn before sending aftertouch
-const unsigned long AFTERTOUCH_INTERVAL_MS = 20; // Min interval between aftertouch updates
 
-// Per-note aftertouch tracking. A note is "active" while its contact is held.
-// noteOnTime[ch] = millis() of the NoteOn for channel ch (used to gate the 50 ms delay).
-unsigned long noteOnTime[16] = {0};
-bool noteActive[16] = {false};            // Currently held (NoteOn sent, NoteOff not yet)
-// Pitch sent in the most recent NoteOn for each channel. NoteOff sends the
-// SAME pitch back so that Scale / Spread / Octave changes between press and
-// release can't strand a different MIDI note on the synth.
-byte noteActivePitch[16] = {0};
-unsigned long lastAftertouchSendTime = 0; // Last time any aftertouch was sent
-int lastAftertouchValue = -1;             // Last aftertouch value sent (-1 = none yet)
-
-// --- NoteOff retry (BLE stuck-note prevention) ---------------------------
+// -----------------------------------------------------------------------------
+// Stuck note handling: NoteOff retry (BLE stuck-note prevention) 
+//
 // BLE-MIDI does not guarantee delivery, so a dropped NoteOff leaves a stuck
 // note. For every finger-note NoteOff we schedule one repeat ~100 ms later;
 // the repeat is only sent if NO finger notes are currently pressed (so it can
@@ -1207,6 +557,10 @@ const unsigned long PANIC_INTERVAL_MS = 1000;
 const uint8_t MIDI_CC_ALL_NOTES_OFF = 123;
 unsigned long lastPanicMs = 0;
 
+// -----------------------------------------------------------------------------
+// Note handling and MIDI output: Reading glove channel 3-14 mux inputs 
+// -----------------------------------------------------------------------------
+//
 // Set variables for reading 4067 inputs and triggering MIDI notes
 CD74HC4067 mux(9, 8, 7, 6); // 4067 Pins for S0, S1, S2 and S3
 const int inputPin = 3;
@@ -1393,6 +747,9 @@ void UpdateNoteOffRetries()
 // Send All Notes Off (CC123 = 0) once per second while fully idle, as a final
 // stuck-note safeguard. Gated so it can never cut a sounding note: requires no
 // finger notes pressed, no flex note active, and the flex modal not engaged.
+//
+// Note: not all MIDI devices will listen to this command
+//
 void UpdateIdlePanic()
 {
   unsigned long now = millis();
@@ -1404,6 +761,10 @@ void UpdateIdlePanic()
   MIDI.sendControlChange(MIDI_CC_ALL_NOTES_OFF, 0, MIDIchannel);
 }
 
+// -----------------------------------------------------------------------------
+// MIDI Aftertouch handling
+// -----------------------------------------------------------------------------
+//
 // Send channel aftertouch based on current FSR reading, but only for notes that
 // have been held for at least AFTERTOUCH_DELAY_MS, and not more often than
 // AFTERTOUCH_INTERVAL_MS, and only when the value actually changes.
@@ -1444,7 +805,9 @@ at = constrain(at, 0, 127);
   }
 }
 
+// -----------------------------------------------------------------------------
 // Process incoming MIDI messages
+// -----------------------------------------------------------------------------
 void midiRead()
 {
 
@@ -1525,6 +888,7 @@ void startAdv(void)
     lastClockMs = now;
 }
 
+
   // Incoming MIDI Program Change. Runs in the BLE scheduler task, so it must be
   // fast: just record the requested slot and flag it for the main loop, which
   // performs the actual patch load and LED override. PC value 0..62 -> preset
@@ -1585,7 +949,10 @@ void startAdv(void)
   }
 }
 
-// Tempo-tracking pitch bend. Called every loop iteration; self-throttles to
+// -----------------------------------------------------------------------------
+// Tempo-tracking pitch bend
+// -----------------------------------------------------------------------------
+// Called every loop iteration; self-throttles to
 // once per TEMPO_BEND_INTERVAL_MS. When enabled, compares the live incoming
 // tempo (rounded integer BPM) against the saved project tempo and, if they
 // differ, sends a MIDI pitch-bend computed by TempoPitchShifter. The bend is
@@ -1632,7 +999,10 @@ void UpdateTempoBend()
   DBG_PRINTLN("");
 }
 
+
+// -----------------------------------------------------------------------------
 // Read accelerometer and send MIDI CC's accordingly
+// -----------------------------------------------------------------------------
   void accelRead()
 {
 
@@ -1641,14 +1011,9 @@ void UpdateTempoBend()
       constrain((myIMU.readFloatAccelY()), -8, 8) + 8; // Reverse X and Y because of IMU orientation on hand
   rawAccelY =
       constrain((myIMU.readFloatAccelX()), -8, 8) + 8; // Reverse X and Y because of IMU orientation on hand
-  // rawAccelZ = constrain((myIMU.readFloatAccelZ()),-8,8) + 8; // Z acis not needed for MIDI CC for now
+  // rawAccelZ = constrain((myIMU.readFloatAccelZ()),-8,8) + 8; // Z axis not needed for MIDI CC for now
 
-  // IMU Output debug - delete later
-  //    DBG_PRINT(rawAccelX);
-  //    DBG_PRINT(" ");
-  //    DBG_PRINT(rawAccelY);
-  //    DBG_PRINT(" ");
-  //    DBG_PRINTLN(rawAccelZ);
+
 
   AccelX = labs(constrain(round((rawAccelX) * 8), 0, 127));
   AccelX = 127 - AccelX; // reversed direction
@@ -1665,7 +1030,8 @@ void UpdateTempoBend()
         round(((int)AccelY - ACCELY_DEADZONE) * 127.0f / (127 - ACCELY_DEADZONE)),
         0, 127);
   }
-  // AccelZ = labs(constrain(round((rawAccelZ) * 8),0,127));
+
+  // AccelZ = labs(constrain(round((rawAccelZ) * 8),0,127)); // AccelZ not used for now 
 
   // AccelX (CC74) is sent at all times whenever its value changes.
   if (AccelX != lastAccelX) {
@@ -1682,6 +1048,9 @@ void UpdateTempoBend()
   }
 }
 
+// -----------------------------------------------------------------------------
+// Flex sensor handling
+// -----------------------------------------------------------------------------
 // Read the index-finger flex sensor and, if its harmonized MIDI note has
 // changed since the last sample, QUEUE the new note for the next quantize
 // grid tick. Flex notes are quantized to the current Scale via the harmonizer
@@ -1793,7 +1162,8 @@ void triggerFlexPulse()
   flexPulseStartMs = now;
 }
 
-// Quantization driver. Called every loop iteration. When flex quantize is OFF,
+// Flex Note time quantization driver. 
+// Called every loop iteration. When flex quantize is OFF,
 // any pending pitch change fires immediately. Otherwise it's deferred to the
 // next grid tick (advanced by flexQuantizeMs).
 void FlexNoteFlush()
@@ -1888,6 +1258,9 @@ void FlushPendingNotes()
   }
 }
 
+// -----------------------------------------------------------------------------
+// Note spread handling
+// -----------------------------------------------------------------------------
 // Note Spread: change the semitone spacing between the notes
 // Examples of different spreads for note handling arrays for the 12 finger contact notes:
 // {60,61,62,63,64,65,66,67,68,69,70,71}; // +1 Chromatic note
@@ -1895,18 +1268,7 @@ void FlushPendingNotes()
 // {60,63,66,69,72,75,78,81,84,87,90,93}; // +3 semitone note
 // {60,64,68,72,76,80,84,88,92,96,100,104}; // +4 semitone note
 
-void NoteSpread(int RootNote, int Spread, int RootNoteOffset)
-{ // Change number of semitones between the keys, eg. +1, +2, +3 & +4
-  for (int i = 1; i < 13; ++i) {
-    Keys[i - 1] = 60 + ((i - 1) * Spread) + RootNoteOffset;
-  }
-  for (size_t i = 0; i < 12; ++i) {
-    DBG_PRINT("Keys[");
-    DBG_PRINT(i);
-    DBG_PRINT("] = ");
-    DBG_PRINTLN(Keys[i]);
-  }
-}
+// NoteSpread() now lives in ScaleQuant.{h,cpp}.
 
 // Returns true if any note button (mux channels 3..14) is currently held down.
 // Used to gate the octave-up/down buttons so they don't fire accidentally while
@@ -1920,6 +1282,9 @@ static bool anyNotePressed()
   return false;
 }
 
+// -----------------------------------------------------------------------------
+// Note blocking in sub-modes
+// -----------------------------------------------------------------------------
 // All three modal contacts (octave-up, octave-down, pinky-palm) are blocked
 // whenever a finger note is being played OR the index/flex modal is engaged.
 // This prevents accidental mode changes during performance.
@@ -1930,6 +1295,11 @@ static bool modalActionsBlocked()
 
 // LED display + tap-tempo helpers are declared in LedDisplay.h.
 
+
+// -----------------------------------------------------------------------------
+// Button & menu handling
+// -----------------------------------------------------------------------------
+//
 // Debounce 4067 inputs and send MIDI notes or trigger index finger & pinky finger modal buttons accordingly
 void debounceButton(int channel)
 { // Debounce signal input pin
@@ -2357,25 +1727,6 @@ void debounceButton(int channel)
   prevButtons[channel] = buttonState;
 }
 
-// Transpose root note +/- octaves
-void OctaveTranspose(int Octave)
-{ // Change octave transpose
-}
-
-// Thumb FSR ADC MIDI Velocity
-void NoteVelocity()
-{ // Read max value from thumb FSR ADC during Note On for X ms to calculate Note On velocity
-}
-
-// Thumb FSR ADC MIDI controls
-void Aftertouch()
-{ // Read thumb FSR ADC and send scaled value to Aftertouch
-}
-
-// Index finger Flex Sensor ADC MIDI controls
-void FlexSensor()
-{ // Read thumb Flex Sensor ADC and send scale quantized note values
-}
 
 // IMU Double Tap Interrupt Setup
 void setupDoubleTapInterrupt()
@@ -2426,7 +1777,6 @@ void int1ISR()
 
 void setup()
 {
-  // put your setup code here, to run once:
 
   //  while (!Serial)
   ;
@@ -2482,7 +1832,7 @@ void setup()
   Bluefruit.configPrphBandwidth(BANDWIDTH_MAX);
 
   Bluefruit.begin();
-  Bluefruit.setName("Bluefruit52 MIDI");
+  Bluefruit.setName("Sneaky Gestures MIDI");
   Bluefruit.setTxPower(8);
 
   // Setup the on board blue LED to be enabled on CONNECT
@@ -2676,7 +2026,6 @@ void loop()
 
   // Start cycling through the 4067 channels to read the thumb contact touching the finger pads
 
-  // int scanOrder[] = {3,2,1,6,5,4,9,8,7,12,11,10}; // Order to scan fingers contacts - Customize based on note order preferences
 
   for (int channel = firstChannel; channel < numChannels; ++channel) {
     // Debounce the incoming input from the thumb connector that's connected to ground and pulling the input low
@@ -2688,26 +2037,21 @@ void loop()
   UpdatePresetScroll();
 
   // Check analog values
-  int modVal = analogRead(indexFLEX);
-  int pitchVal = analogRead(thumbFSR);
-  // pitchVal = map(pitchVal, 0, 1023, -8000, 8000);
-  // modVal = modVal / 8;
+  int flexVal = analogRead(indexFLEX);
+  int aftertouchVal = analogRead(thumbFSR);
 
   // send new mod value if it has changed
-  if (lastFlexVal != modVal) {
-    //    DBG_PRINT("modWheel = ");
-    //    DBG_PRINTLN(modVal);
-    //    MIDI.sendControlChange(1, modVal, 1);
-    lastFlexVal = modVal;
+  if (lastFlexVal != flexVal) {
+
+    lastFlexVal = flexVal;
   }
 
   // send new pitch value if it has changed
-  if (lastFsrVal != pitchVal) {
-    //   DBG_PRINT("                  pitchBend = ");
-    //   DBG_PRINTLN(pitchVal);
-    //   MIDI.sendPitchBend(pitchVal, 1); //pot value sent as pitch bend
-    lastFsrVal = pitchVal;
+  if (lastFsrVal != aftertouchVal) {
+
+    lastFsrVal = aftertouchVal;
   }
+
 
   // Index modal contact (channel 2) held: continuously map indexFLEX to MIDI
   // notes within [minNote..maxNote]. Also active while the flex-range editor is
@@ -2770,4 +2114,4 @@ void loop()
 
   // Idle All-Notes-Off safeguard (once/sec when nothing is sounding).
   UpdateIdlePanic();
-}
+}

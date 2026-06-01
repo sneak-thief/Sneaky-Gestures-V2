@@ -7,7 +7,9 @@
 // Sneaky Gestures V2: MIDI BLE Gestural Glove
 // https://github.com/sneak-thief/Sneaky-Gestures-V2
 // -----------------------------------------------------------------------------
-// Debug serial logging. Two tiers so chatty per-event logging can be compiled
+// Debug serial logging. 
+//
+// Two tiers so chatty per-event logging can be compiled
 // out for release builds while keeping (or separately gating) startup/boot
 // diagnostics. When a tier is disabled, its macros expand to nothing, so the
 // Serial calls AND their string literals are removed by the compiler -- no CPU

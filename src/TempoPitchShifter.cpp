@@ -1,13 +1,17 @@
 /*****************************************************************************/
 // Sneaky Gestures V2: MIDI BLE Gestural Glove
 // https://github.com/sneak-thief/Sneaky-Gestures-V2
-// Tempo-to-pitch handler. For syncing the pitch to audio sources whose pitch 
+//
+// Tempo-to-pitch handler
+//
+// For syncing the pitch to audio sources whose pitch 
 // that changes when the tempo is changed (eg. vinyl, CDJs)
 // When a preset is set to a specific tempo, read the incoming MIDI tempo
 // and send a MIDI pitch bend command to match the instrument's pitch
 // to the accompanying audio track. Set the instrument's pitch bend range to
 // +/4 semitones
 // ---------------------------------------------------------------------------
+
 
 #include "TempoPitchShifter.h"
 
