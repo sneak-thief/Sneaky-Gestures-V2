@@ -1,12 +1,12 @@
-<!doctype html>
-<html lang="en">
-<head>
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><!-- base href="https://raw.githubusercontent.com/sneak-thief/Sneaky-Gestures-V2/main/documentation/LED_Mode_Reference.html" -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LED Mode Reference</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com/">
+<link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+<link href="LED%20Mode%20Reference_files/css2.css" rel="stylesheet">
 <style>
   :root{
     --ink:#141414;        /* titles + key text */
@@ -291,7 +291,8 @@
       <a href="#scale"><b>05</b> Scale Select</a>
       <a href="#tap"><b>06</b> Tap Tempo + Sub-menus</a>
       <a href="#preset"><b>07</b> Preset Browser + Sub-menus</a>
-      <a href="#battery"><b>08</b> Battery Level</a>
+      <a href="#confirm"><b>08</b> Save / Load Confirm</a>
+      <a href="#battery"><b>09</b> Battery Level</a>				 
     </nav>
   </header>
 
@@ -321,10 +322,10 @@
       </div>
       <table class="states">
         <caption>Behaviour</caption>
-        <tr><th>Held</th><td>Source knuckle LED <b>red</b> (R255) with a dim <b>white core</b> (W50).</td></tr>
+        <tbody><tr><th>Held</th><td>Source knuckle LED <b>red</b> (R255) with a dim <b>white core</b> (W50).</td></tr>
         <tr><th>Ripple</th><td>Note-related colours radiate outward from the source LED, fading in over ~200 ms.</td></tr>
         <tr><th>Release</th><td>Source LED crossfades to the note-related colour then to black.</td></tr>
-      </table>
+      </tbody></table>
     </div>
   </section>
 
@@ -353,11 +354,11 @@
       </div>
       <table class="states">
         <caption>Gradient — LED 0 (flat) to LED 6 (full bend)</caption>
-        <tr><th><span class="swatch" style="background:#ff5000"></span>LED 0</th><td>Orange — first to light as the finger bends.</td></tr>
+        <tbody><tr><th><span class="swatch" style="background:#ff5000"></span>LED 0</th><td>Orange — first to light as the finger bends.</td></tr>
         <tr><th><span class="swatch" style="background:#00ffff"></span>LED 3</th><td>Cyan — mid bend.</td></tr>
         <tr><th><span class="swatch" style="background:#ff0000"></span>LED 6</th><td>Red — maximum bend.</td></tr>
         <tr><th>White core</th><td>Pulses across lit LEDs each time a quantized flex note fires.</td></tr>
-      </table>
+      </tbody></table>
     </div>
   </section>
 
@@ -386,10 +387,10 @@
       </div>
       <table class="states">
         <caption>Reading the strip</caption>
-        <tr><th><span class="swatch" style="background:#ffd400"></span>LED 3 yellow</th><td>Always lit — the no-shift reference point.</td></tr>
+        <tbody><tr><th><span class="swatch" style="background:#ffd400"></span>LED 3 yellow</th><td>Always lit — the no-shift reference point.</td></tr>
         <tr><th><span class="swatch" style="background:#00d12a"></span>LEDs 2·1·0 green</th><td>Octaves <b>up</b> (+1, +2, +3) growing toward the index.</td></tr>
         <tr><th><span class="swatch" style="background:#ff0000"></span>LEDs 4·5·6 red</th><td>Octaves <b>down</b> (−1, −2, −3) growing toward the pinky.</td></tr>
-      </table>
+      </tbody></table>
     </div>
   </section>
 
@@ -418,11 +419,11 @@
       </div>
       <table class="states">
         <caption>Marker position</caption>
-        <tr><th class="ctrl">Spread 1</th><td><span class="swatch" style="background:#00ffff"></span>LED 6</td></tr>
+        <tbody><tr><th class="ctrl">Spread 1</th><td><span class="swatch" style="background:#00ffff"></span>LED 6</td></tr>
         <tr><th class="ctrl">Spread 2</th><td><span class="swatch" style="background:#00ffff"></span>LED 4</td></tr>
         <tr><th class="ctrl">Spread 3</th><td><span class="swatch" style="background:#00ffff"></span>LED 2</td></tr>
         <tr><th class="ctrl">Spread 4</th><td><span class="swatch" style="background:#00ffff"></span>LED 0</td></tr>
-      </table>
+      </tbody></table>
     </div>
   </section>
 
@@ -452,11 +453,11 @@
       </div>
       <table class="states">
         <caption>Colour bands — length = scale index within band</caption>
-        <tr><th><span class="swatch" style="background:#ff0000"></span>Red</th><td>Scales <b>0–6</b> — 1 LED (scale 0 = no quantization) up to 7 LEDs.</td></tr>
+        <tbody><tr><th><span class="swatch" style="background:#ff0000"></span>Red</th><td>Scales <b>0–6</b> — 1 LED (scale 0 = no quantization) up to 7 LEDs.</td></tr>
         <tr><th><span class="swatch" style="background:#ffd400"></span>Yellow</th><td>Scales <b>7–13</b> — 1 LED up to 7 LEDs.</td></tr>
         <tr><th><span class="swatch" style="background:#007fff"></span>Blue</th><td>Scales <b>14–19</b> — 1 LED up to 6 LEDs.</td></tr>
         <tr><th class="ctrl">ch3 / ch6</th><td>Scroll scale up / down. Each press refreshes the 3 s auto-exit timer.</td></tr>
-      </table>
+      </tbody></table>
     </div>
   </section>
 
@@ -489,12 +490,12 @@
 
       <table class="states">
         <caption>Menu controls (notes suppressed on these channels)</caption>
-        <tr><th class="ctrl">ch3 / ch6</th><td><b>Key transpose</b> +/− (±5 semitones). LED 3 solid white; blink + ripple off while engaged.</td></tr>
+        <tbody><tr><th class="ctrl">ch3 / ch6</th><td><b>Key transpose</b> +/− (±5 semitones). LED 3 solid white; blink + ripple off while engaged.</td></tr>
         <tr><th class="ctrl">ch9 / ch12</th><td><b>Root transpose</b> +/− (±5, mode rotation). LED 3 solid blue while engaged.</td></tr>
         <tr><th class="ctrl">ch5 / ch8</th><td><b>Tempo</b> +1 / −1 BPM (shows tempo readout).</td></tr>
         <tr><th class="ctrl">ch4</th><td><b>CC swap</b> toggle (CC74 ↔ CC1 axes).</td></tr>
         <tr><th class="ctrl">ch5 hold 1 s</th><td>Toggle the <b>flex-range editor</b>.</td></tr>
-      </table>
+      </tbody></table>
 
       <div class="strip-block">
         <div class="subhead">Sub-view — Transpose (key +2, white)</div>
@@ -511,9 +512,9 @@
       </div>
       <table class="states">
         <caption>Transpose sides — LED 3 = mode colour (white key / blue root)</caption>
-        <tr><th>Up · LEDs 2·1·0</th><td><span class="swatch" style="background:#a000ff"></span>purple = +1…+3 &nbsp; <span class="swatch" style="background:#00ffff"></span>cyan = +4…+5</td></tr>
+        <tbody><tr><th>Up · LEDs 2·1·0</th><td><span class="swatch" style="background:#a000ff"></span>purple = +1…+3 &nbsp; <span class="swatch" style="background:#00ffff"></span>cyan = +4…+5</td></tr>
         <tr><th>Down · LEDs 4·5·6</th><td><span class="swatch" style="background:#ffd400"></span>yellow = −1…−3 &nbsp; <span class="swatch" style="background:#ff5000"></span>orange = −4…−5</td></tr>
-      </table>
+      </tbody></table>
 
       <div class="strip-block">
         <div class="subhead">Sub-view — Tempo readout (example 109 BPM)</div>
@@ -526,13 +527,13 @@
           <div class="led active"><div class="dot lit" style="--c:#ffd400"></div><div class="idx">1</div><div class="fn">decade · yellow</div></div>
           <div class="led"><div class="dot"></div><div class="idx">0</div><div class="fn">—</div></div>
         </div>
-        <div class="rail"><span>Ones · LEDs 6→2 (W)</span><span>Decade · 1 & 0</span></div>
+        <div class="rail"><span>Ones · LEDs 6→2 (W)</span><span>Decade · 1 &amp; 0</span></div>
       </div>
       <table class="states">
         <caption>Tempo encoding (ch5 / ch8 nudge)</caption>
-        <tr><th>Ones 1–10</th><td>LEDs 6→2 on the <b>W</b> channel: full = 2 steps, ~1/10-bright = 1 step. e.g. 9 = LEDs 6·5·4·3 full + LED 2 dim.</td></tr>
+        <tbody><tr><th>Ones 1–10</th><td>LEDs 6→2 on the <b>W</b> channel: full = 2 steps, ~1/10-bright = 1 step. e.g. 9 = LEDs 6·5·4·3 full + LED 2 dim.</td></tr>
         <tr><th>Decade</th><td>Colour on LED 1 (+ LED 0 for the upper half of each 20-BPM band): purple, pink, blue, cyan, green, yellow, orange, red.</td></tr>
-      </table>
+      </tbody></table>
 
       <div class="strip-block">
         <div class="subhead">Sub-view — CC swap (ch4, swapped = gradient)</div>
@@ -549,9 +550,9 @@
       </div>
       <table class="states">
         <caption>CC swap status</caption>
-        <tr><th><span class="swatch" style="background:#00c8b4"></span>All turquoise</th><td><b>Default</b> — X→CC74, Y→CC1.</td></tr>
+        <tbody><tr><th><span class="swatch" style="background:#00c8b4"></span>All turquoise</th><td><b>Default</b> — X→CC74, Y→CC1.</td></tr>
         <tr><th>Turquoise → purple</th><td><b>Swapped</b> — Y→CC74, X→CC1. Saved per preset.</td></tr>
-      </table>
+      </tbody></table>
 
       <div class="strip-block">
         <div class="subhead">Sub-view — Flex-range editor (ch5 hold 1 s) — editing MAX</div>
@@ -568,11 +569,11 @@
       </div>
       <table class="states">
         <caption>Flex-range editor — flex notes audible to test the range</caption>
-        <tr><th class="ctrl">ch3 / ch6</th><td>Raise / lower <b>MAX</b> note (bent end). Ones LEDs tinted <span class="swatch" style="background:#ff0000"></span>dim red (R50).</td></tr>
+        <tbody><tr><th class="ctrl">ch3 / ch6</th><td>Raise / lower <b>MAX</b> note (bent end). Ones LEDs tinted <span class="swatch" style="background:#ff0000"></span>dim red (R50).</td></tr>
         <tr><th class="ctrl">ch9 / ch12</th><td>Raise / lower <b>MIN</b> note (extended end). Ones LEDs tinted <span class="swatch" style="background:#0000ff"></span>dim blue (B50).</td></tr>
         <tr><th>Readout</th><td>Same numeric encoding as the tempo view — shows the MIDI note number of the endpoint last touched.</td></tr>
         <tr><th>Exit</th><td>Auto-exits after 5 s idle, or re-hold ch5.</td></tr>
-      </table>
+      </tbody></table>
 
     </div>
   </section>
@@ -606,14 +607,14 @@
 
       <table class="states">
         <caption>Controls (while latched)</caption>
-        <tr><th class="ctrl">ch3 / ch6</th><td>Scroll preset selection up / down.</td></tr>
+        <tbody><tr><th class="ctrl">ch3 / ch6</th><td>Scroll preset selection up / down.</td></tr>
         <tr><th class="ctrl">ch9 / ch12</th><td>Cycle flex / note quantize → Quantize sub-view.</td></tr>
         <tr><th class="ctrl">ch11</th><td>Cycle brightness → Brightness sub-view.</td></tr>
         <tr><th class="ctrl">ch8</th><td>Toggle tempo-tracking pitch bend → Tempo-bend sub-view.</td></tr>
-        <tr><th class="ctrl">ch2 touch</th><td>Load the selected preset and exit.</td></tr>
-        <tr><th class="ctrl">Pinky-palm 1 s</th><td>Save current settings to the slot and exit.</td></tr>
+        <tr><th class="ctrl">ch2 touch</th><td>Load the selected preset and exit. Flashes a green→cyan confirm bar (300 ms).</td></tr>
+        <tr><th class="ctrl">Pinky-palm 1 s</th><td>Save current settings to the slot and exit. Flashes an orange→cyan confirm bar (300 ms).</td></tr>
         <tr><th class="ctrl">Octave-down 1 s</th><td>Exit without load or save.</td></tr>
-      </table>
+      </tbody></table>
       <div class="keyline">
         <span><span class="swatch" style="background:#a000ff"></span>purple</span>
         <span><span class="swatch" style="background:#ff50b4"></span>pink</span>
@@ -641,10 +642,10 @@
       </div>
       <table class="states">
         <caption>Quantize — note (ch12) on 6→4 purple · flex (ch9) on 2→0 cyan</caption>
-        <tr><th class="ctrl">Note · ch12</th><td><span class="swatch" style="background:#ff5000"></span>OFF = LED 6 orange &nbsp; <span class="swatch" style="background:#a000ff"></span>1/8 → 1/16 → 1/32 = 6 → 6,5 → 6,5,4 purple</td></tr>
+        <tbody><tr><th class="ctrl">Note · ch12</th><td><span class="swatch" style="background:#ff5000"></span>OFF = LED 6 orange &nbsp; <span class="swatch" style="background:#a000ff"></span>1/8 → 1/16 → 1/32 = 6 → 6,5 → 6,5,4 purple</td></tr>
         <tr><th class="ctrl">Flex · ch9</th><td><span class="swatch" style="background:#ffd400"></span>OFF = LED 2 yellow &nbsp; <span class="swatch" style="background:#00ffff"></span>1/8 → 1/16 → 1/32 = 2 → 2,1 → 2,1,0 cyan</td></tr>
         <tr><th>LED 3</th><td>Always blank (separator).</td></tr>
-      </table>
+      </tbody></table>
 
       <div class="strip-block">
         <div class="subhead">Sub-view — Brightness (ch11, rainbow preview)</div>
@@ -661,8 +662,8 @@
       </div>
       <table class="states">
         <caption>Brightness — ch11 cycles</caption>
-        <tr><th class="ctrl">Cycle</th><td><b>off → 10 → 30 → 60 → 120 → 180 → 255</b> (wraps). Rainbow brightness tracks the level; <b>off</b> shows a dark strip. Saved per preset.</td></tr>
-      </table>
+        <tbody><tr><th class="ctrl">Cycle</th><td><b>off → 10 → 30 → 60 → 120 → 180 → 255</b> (wraps). Rainbow brightness tracks the level; <b>off</b> shows a dark strip. Saved per preset.</td></tr>
+      </tbody></table>
 
       <div class="strip-block">
         <div class="subhead">Sub-view — Tempo-bend (ch8, enabled)</div>
@@ -679,23 +680,115 @@
       </div>
       <table class="states">
         <caption>Tempo-bend (ch8) — retunes to incoming clock tempo</caption>
-        <tr><th><span class="swatch" style="background:#ff0000"></span>All red</th><td><b>Disabled.</b></td></tr>
+        <tbody><tr><th><span class="swatch" style="background:#ff0000"></span>All red</th><td><b>Disabled.</b></td></tr>
         <tr><th>Red → blue</th><td><b>Enabled</b> — once/sec, pitch-bends to retune project tempo to incoming MIDI clock. Saved per preset.</td></tr>
         <tr><th class="ctrl">PC 0–62</th><td>Program Change loads that preset and flashes its band 1.2 s.</td></tr>
-      </table>
+      </tbody></table>
 
     </div>
   </section>
 
-  <!-- ====================== 08 BATTERY ====================== -->
+  <!-- ====================== 08 SAVE / LOAD CONFIRM ====================== -->
+  <section class="mode" id="confirm">
+    <div class="mode__head">
+      <span class="num">08 — Confirm · 300 ms</span>
+      <h2>Save / Load<br>Confirmation</h2>
+      <div class="enter">SHOWN ON<br>preset save or load</div>
+      <p>A brief 300 ms gradient bar across the whole strip confirms a patch was written or
+         recalled. <b>Save</b> (pinky-palm 1 s in the browser) flashes orange→cyan; <b>load</b>
+         (ch2 touch in the browser) flashes green→cyan. It takes top priority over every other
+         display, then the strip returns to its previous state.</p>
+    </div>
+    <div class="mode__body">
+      <div class="strip-block">
+        <div class="strip-caption"><span>Save — orange → cyan</span><span class="state">SAVED</span></div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#ff6e00"></div><div class="idx">0</div><div class="fn">orange</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#d47d2a"></div><div class="idx">1</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#aa8c55"></div><div class="idx">2</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#7f9b7f"></div><div class="idx">3</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#55aaaa"></div><div class="idx">4</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#2ab9d4"></div><div class="idx">5</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00c8ff"></div><div class="idx">6</div><div class="fn">cyan</div></div>
+        </div>
+        <div class="rail"><span>LED 0 · orange</span><span>cyan · LED 6</span></div>
+      </div>
+      <div class="strip-block">
+        <div class="strip-caption"><span>Load — green → cyan</span><span class="state">LOADED</span></div>
+        <div class="strip">
+          <div class="led active"><div class="dot lit" style="--c:#00ff00"></div><div class="idx">0</div><div class="fn">green</div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00f52a"></div><div class="idx">1</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00ec55"></div><div class="idx">2</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00e37f"></div><div class="idx">3</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00daaa"></div><div class="idx">4</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00d1d4"></div><div class="idx">5</div><div class="fn"></div></div>
+          <div class="led active"><div class="dot lit" style="--c:#00c8ff"></div><div class="idx">6</div><div class="fn">cyan</div></div>
+        </div>
+        <div class="rail"><span>LED 0 · green</span><span>cyan · LED 6</span></div>
+      </div>
+      <table class="states">
+        <caption>States</caption>
+        <tbody><tr><th><span class="swatch" style="background:#ff6e00"></span>Orange → cyan</th><td><b>Saved</b> — preset written to the selected slot.</td></tr>
+        <tr><th><span class="swatch" style="background:#00ff00"></span>Green → cyan</th><td><b>Loaded</b> — preset recalled (browser load).</td></tr>
+        </tbody></table>
+    </div>
+  </section>
+
+																   
+									 
+							
+													  
+							
+																	
+																							  
+																						   
+																							
+											 
+		  
+							
+							   
+																													  
+						   
+																																		  
+																																		  
+																																		  
+																																		  
+																										   
+																										   
+																										   
+			  
+																								  
+			
+							
+								 
+																																			
+																																		  
+																																				
+					  
+		  
+			
+
+		  
+								   
+																						
+													   
+		   
+
+	  
+
+
+			  
+
+  <!-- ====================== 09 BATTERY ====================== -->
   <section class="mode" id="battery">
     <div class="mode__head">
-      <span class="num">08 — Indicator · 2 s</span>
+      <span class="num">09 — Indicator · 2 s</span>
       <h2>Battery Level</h2>
       <div class="enter">SHOWN ON<br>boot · or IMU double-tap</div>
       <p>Green bars from LED 6 show charge (2–7 bars). A low battery blinks LED 6 red. While
-         charging, LED 6 turns solid blue regardless of level. Works whether or not BLE is
-         connected.</p>
+         charging, LED 6 turns solid blue regardless of level. Out of caution against power
+         instability, any charge below 20% (~3.57 V) is treated as low and blinks red. Works
+         whether or not BLE is connected.</p>
     </div>
     <div class="mode__body">
       <div class="strip-block">
@@ -713,19 +806,20 @@
       </div>
       <table class="states">
         <caption>States</caption>
-        <tr><th><span class="swatch" style="background:#00d12a"></span>Green bars</th><td>2–7 LEDs from LED 6 = capacity.</td></tr>
-        <tr><th><span class="swatch" style="background:#ff0000"></span>LED 6 blink red</th><td>Low battery (≤ 1 bar).</td></tr>
+        <tbody><tr><th><span class="swatch" style="background:#00d12a"></span>Green bars</th><td>2–7 LEDs from LED 6 = capacity.</td></tr>
+        <tr><th><span class="swatch" style="background:#ff0000"></span>LED 6 blink red</th><td>Low battery (&lt; 20% / ~3.57 V).</td></tr>
         <tr><th><span class="swatch" style="background:#0000ff"></span>LED 6 solid blue</th><td>Charging — overrides level on LED 6.</td></tr>
-      </table>
+      </tbody></table>
     </div>
   </section>
 
   <footer>
     <span>LED Mode Reference</span>
-    <span><a href="https://involucija.org" title="INVOLUCIJA">INVOLUCIJA.ORG</a></span>
+    <span><a href="https://involucija.org/" title="INVOLUCIJA">INVOLUCIJA.ORG</a></span>
     <span>Strip order 6 → 0 · Pinky → Index</span>
   </footer>
 
 </div>
-</body>
-</html>
+
+
+</body></html>
