@@ -4,6 +4,9 @@
 //
 // Scale handler
 //
+// Credit: Audo Commander's ACSensorizer
+// https://www.midibox.org/dokuwiki/acsensorizer_04
+// 
 // ScaleQuant.h
 //
 // Musical scale tables, scale-degree -> MIDI pitch mapping, the chromatic key
