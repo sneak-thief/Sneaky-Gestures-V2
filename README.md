@@ -68,17 +68,23 @@ The full visual reference is in [LED_Mode_Reference.html](https://htmlpreview.gi
 ## Build
 
 This is a [PlatformIO](https://platformio.org/) project targeting the Adafruit
-nRF52 BSP.
+nRF52 BSP which is also used by the Seeed XIAO Sense. 
+
+[Install Seeed XIAO Sense toolchain](https://wiki.seeedstudio.com/xiao_nrf52840_with_platform_io/)
 
 ```sh
-# Build
-pio run -e seeed_xiao_nrf52840_sense
 
-# Upload (put the XIAO in bootloader mode — double-tap reset)
-pio run -e seeed_xiao_nrf52840_sense -t upload
+#Install Adafruit nrfutil to be able to automatically upload the firmware
+pip3 install --user adafruit-nrfutil
+
+# Build
+platformio.exe run
+
+# Upload 
+platformio.exe run --target upload
 
 # Clean
-pio run -e seeed_xiao_nrf52840_sense -t clean
+pio run -t clean
 ```
 
 ### Dependencies
@@ -90,7 +96,7 @@ All declared in `platformio.ini`:
 - FortySevenEffects/MIDI Library
 - Seeed Arduino LSM6DS3
 - Adafruit LittleFS
-- CD74HC4067
+- Lightweight-CD74HC4067-Arduino
 
 ## Usage
 
