@@ -122,7 +122,8 @@ quantize settings, brightness, and tilt-CC assignment.
   beat grid).
 - **Toggle tempo pitch-bend** (auto-bends pitch when an external clock drifts
   from the preset tempo). Useful for staying at the same pitch of audio whose 
-  pitch changes with tempo, eg. vinyl, CDJs in variable pitch mode, etc. 
+  pitch changes with tempo, eg. vinyl, CDJs in variable pitch mode, etc. Set
+  instrument's pitch bend range to +/-4 semitones
 - **Cycle LED brightness**, with a live rainbow preview.
 - **Load** the highlighted preset and exit (Index modal pad). The strip flashes
   a green→cyan bar to confirm the load.
