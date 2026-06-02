@@ -16,7 +16,7 @@ back of the hand shows you what's going on — see the
    settings and connect to the glove as a BLE-MIDI device.
 3. **Check the battery any time** by double-tapping the glove (a sharp tap on
    the back of the hand). Green bars show charge level; a blinking red LED means
-   low battery; solid blue means it's charging.
+   low battery; solid blue means it's charging when the USB port is connected.
 
 > Most controls only send MIDI once a host is connected. The battery display and
 > LED animations work even while unpaired.
