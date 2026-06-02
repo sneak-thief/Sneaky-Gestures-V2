@@ -19,7 +19,7 @@ back of the hand shows you what's going on — see the
    low battery; solid blue means it's charging when the USB port is connected.
 
 > Most controls only send MIDI once a host is connected. The battery display and
-> LED animations work even while unpaired.
+> works even while unpaired. The other LED animations only work when paired. 
 
 ---
 
