@@ -23,6 +23,8 @@ back of the hand shows you what's going on — see the
 
 ---
 
+<img src="Sneaky-Gestures_Controls.png" width="50%" alt="Sneaky Gestures V2 - Controls">
+
 ## 2. Playing notes
 
 Your **thumb is the "play" contact.** Touching it to a finger pad plays that
