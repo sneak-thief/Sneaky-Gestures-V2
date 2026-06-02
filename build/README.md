@@ -32,6 +32,8 @@ Beginning the pad and sensor wire routing.
 - Index modal: 4067 channel 2
 - Pinky palm: 4067 channel 15
 
+![Hardware channels](../hardware/Sneaky-Gestures_hardware_channels.png)
+
 Note: I had originally planned the lowest note to be the base of the index and wired it as follows:
 
 | Finger | Note #s from base to tip | 4067 channels |
