@@ -17,6 +17,9 @@
 
 ![Bill of materials](../build/00-glove-bom.jpg)
 
+![Hardware channels](Sneaky-Gestures_hardware_channels.png
+)
+
 ## Schematics
 
 | File | Description |
