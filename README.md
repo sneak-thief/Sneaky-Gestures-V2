@@ -22,7 +22,7 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 - **12 finger pads** (3 per finger × 4 fingers) playing scale-quantized MIDI
 - **20 scales** including major, minor, modes, pentatonic, blues, exotic
   modes — selectable live
-- **Flex-bend** continuous pitch sweep mapped across the configured note range,
+- **Flex-bend** continuous **glissando** sweep mapped across the configured note range,
   scale-quantized
 - **Two-axis accelerometer CCs** — CC74 / CC1 by default, swappable
 - **Channel aftertouch** from the thumb FSR
