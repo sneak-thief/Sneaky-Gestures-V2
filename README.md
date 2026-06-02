@@ -39,6 +39,8 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 - **Quantization grids** for both finger notes and flex notes (off / 1/8 /
   1/16 / 1/32), locked to internal tempo or external MIDI clock
 
+<img src="documentation/Sneaky-Gestures_Controls.png" width="50%" alt="Sneaky Gestures V2 - Controls">
+
 ## Hardware
 
 | Component       | Where                            | Connection                        |
