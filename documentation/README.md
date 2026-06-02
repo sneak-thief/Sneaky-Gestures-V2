@@ -62,10 +62,10 @@ Besides the twelve note pads, four special pads control the instrument:
 These run continuously while you play and are what make the glove feel like an
 instrument rather than a button grid.
 
-- **Index flex (bend sensor).** Bend your index finger to sweep pitch across a
-  range of scale notes. Hold the **Index modal** pad to arm the flex note; the
-  bend then glides smoothly through the available notes between the low and high
-  limits you've set. Straight finger = lowest note, fully bent = highest.
+- **Index flex (bend sensor).** Bend your index finger to glissando sweep across
+  a range of scale notes. Hold the **Index modal** pad to arm the flex note; the
+  bend then glides through the available notes (aka glissando) between the low and 
+  high limits you've set. Straight finger = lowest note, fully bent = highest.
 - **Thumb pressure (FSR).** Press harder with the thumb to send channel
   aftertouch — use it for vibrato, swells, or filter movement, depending on how
   your synth maps aftertouch.
