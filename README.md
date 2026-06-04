@@ -24,7 +24,7 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
   modes — selectable live
 - **Flex-bend** continuous **glissando** sweep mapped across the configured note range,
   scale-quantized
-- **Two-axis accelerometer CCs** — CC74 / CC1 by default, swappable
+- **Two-axis accelerometer CCs** — CC1 / CC11 by default, swappable
 - **Channel aftertouch** from the thumb FSR
 - **Tap tempo** with sub-menus for key/root transpose, BPM nudge, CC swap, and
   the flex-range editor — works alongside incoming MIDI clock
