@@ -48,7 +48,7 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 | MCU             | Wrist                            | Seeed XIAO nRF52840 Sense         |
 | LED strip       | Back of hand                     | 7 × SK681 RGBW on pin 5           |
 | Multiplexer     | Inline                           | CD74HC4067, S0–S3 on pins 9/8/7/6 |
-| Touch pads      | 12 on the fingers + thumb common | Mux inputs                        |
+| Touch pads      | 16 on the fingers + thumb common | Mux inputs                        |
 | Flex sensor     | Index finger back                | Analog A2                         |
 | FSR             | Thumb pad                        | Analog A1                         |
 | IMU             | Onboard                          | LSM6DS3 (Sense board), I²C 0x6A   |
