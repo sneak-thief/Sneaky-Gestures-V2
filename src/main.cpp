@@ -16,7 +16,7 @@
 //   Channel 15    : Pinky palm  (tap = spread cycle / hold 1s = scale cycle)
 //   A1            : Thumb FSR   → aftertouch (AFTERTOUCH_DELAY_MS = 30ms after NoteOn)
 //   A2            : Index flex  → quantized notes + LED bar while ch2 held
-//   IMU           : AccelX→CC74, AccelY→CC71, double-tap→battery display
+//   IMU           : AccelX→CC11, AccelY→CC71, double-tap→battery display
 //
 // SCALE QUANTIZATION
 //   20 scales (0=chromatic). Each button maps to a unique scale degree;
@@ -287,10 +287,10 @@ unsigned int lastAccelY;
 // - unsigned int lastAccelZ;             // Z axis - not needed for MIDI CC (yet)
 unsigned long lastExecutionTimeAccel = 0; // Timer for sending IMU MIDI CC's
 const unsigned long intervalAccel = 25;   // Send IMU MIDI CC's every X ms
-unsigned int CCAccelX = 74;               // Default: Set IMU X axis to MIDI CC 74
-unsigned int CCAccelY = 1;                // Default: Set IMU Y axis to MIDI CC 1 (mod wheel)
+unsigned int CCAccelX = 1;               // Default: Set IMU X axis to MIDI CC 1 (mod wheel)
+unsigned int CCAccelY = 11;                // Default: Set IMU Y axis to MIDI CC 11 (expression)
 // CC mapping swap (toggled by ch4 in the tap-tempo menu). When true, CCAccelX
-// and CCAccelY are exchanged so Y sends CC74 and X sends CC1.
+// and CCAccelY are exchanged so Y sends CC1 and X sends CC11.
 bool ccSwapped = false;
 
 
@@ -1035,7 +1035,7 @@ void UpdateTempoBend()
 
   // AccelZ = labs(constrain(round((rawAccelZ) * 8),0,127)); // AccelZ not used for now 
 
-  // AccelX (CC74) is sent at all times whenever its value changes.
+  // AccelX is sent at all times whenever its value changes.
   if (AccelX != lastAccelX) {
     MIDI.sendControlChange(CCAccelX, AccelX, MIDIchannel);
     lastAccelX = AccelX;
@@ -1321,7 +1321,7 @@ void debounceButton(int channel)
       //   ch3  / ch6   = keyTranspose  +1 / -1   (range +/- 5 semitones)
       //   ch9  / ch12  = rootTranspose +1 / -1   (range +/- 5 semitones)
       //   ch5  / ch8   = tempo         +1 / -1 BPM   (shows tempo display)
-      //   ch4          = toggle CC74/CC1 axis swap  (shows swap display)
+      //   ch4          = toggle CC1/CC11 axis swap  (shows swap display)
       // tapTempoTransposeMode tracks which menu was last used to colour LED 3:
       //   1 = keyTranspose (white blink), 2 = rootTranspose (blue blink),
       //   3 = tempo nudge (tempo display takes over the strip),
@@ -1395,14 +1395,14 @@ void debounceButton(int channel)
             DBG_PRINTLN(tempo);
           }
         } else if (channel == 4) {
-          // Toggle the CC74/CC1 axis swap. Show the swap display.
+          // Toggle the CC1/CC11 axis swap. Show the swap display.
           ccSwapped = !ccSwapped;
           unsigned int tmp = CCAccelX;
           CCAccelX = CCAccelY;
           CCAccelY = tmp;
           tapTempoTransposeMode = 4;
           DBG_PRINT("CC swap -> ");
-          DBG_PRINTLN(ccSwapped ? "SWAPPED (Y=CC74, X=CC1)" : "default (X=CC74, Y=CC1)");
+          DBG_PRINTLN(ccSwapped ? "SWAPPED (Y=CC1, X=CC11)" : "default (X=CC1, Y=CC11)");
         }
         // Refresh the inactivity timer so the menu stays open while in use.
         lastTapMs = millis();
