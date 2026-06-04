@@ -16,7 +16,7 @@
 //   Channel 15    : Pinky palm  (tap = spread cycle / hold 1s = scale cycle)
 //   A1            : Thumb FSR   → aftertouch (AFTERTOUCH_DELAY_MS = 30ms after NoteOn)
 //   A2            : Index flex  → quantized notes + LED bar while ch2 held
-//   IMU           : AccelX→CC11, AccelY→CC71, double-tap→battery display
+//   IMU           : AccelX→CC1 AccelY→CC11, double-tap→battery display
 //
 // SCALE QUANTIZATION
 //   20 scales (0=chromatic). Each button maps to a unique scale degree;
