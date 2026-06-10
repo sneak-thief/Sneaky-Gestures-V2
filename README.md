@@ -18,7 +18,7 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 ---
 Youtube Demo:
 
-[![Sneaky Gestures V2](https://i.ytimg.com/vi/-hAtGIP00vk/maxresdefault.jpg)](https://www.youtube.com/watch?v=hAtGIP00vk)
+[![Sneaky Gestures V2](https://i.ytimg.com/vi/-hAtGIP00vk/maxresdefault.jpg)](https://www.youtube.com/watch?v=-hAtGIP00vk)
 
 
 ## Features
