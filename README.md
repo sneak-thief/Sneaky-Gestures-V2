@@ -16,6 +16,10 @@ device — pair it with any DAW, hardware synth, or mobile MIDI host.
 <img src="build/15-glove-bend1.jpg" width="49%" alt="Sneaky Gestures V2 - Front bending"><img src="build/16-glove-bend2.jpg" width="49%" alt="Sneaky Gestures V2 - Back bending">
 
 ---
+Youtube Demo:
+
+[![Sneaky Gestures V2](https://i.ytimg.com/vi/-hAtGIP00vk/maxresdefault.jpg)](https://www.youtube.com/watch?v=hAtGIP00vk)
+
 
 ## Features
 
