@@ -2115,6 +2115,6 @@ void loop()
   // Re-send any dropped NoteOff (BLE stuck-note prevention).
   UpdateNoteOffRetries();
 
-  // Idle All-Notes-Off safeguard (once/sec when nothing is sounding).
-  UpdateIdlePanic();
+  // Idle All-Notes-Off safeguard (once/sec when nothing is sounding) - DISABLED FOR NOW 
+  // UpdateIdlePanic();
 }
