@@ -30,6 +30,13 @@ Youtube Demo:
   scale-quantized
 - **Two-axis accelerometer CCs** — CC1 / CC11 by default, swappable
 - **Channel aftertouch** from the thumb FSR
+- **Smooth, low-latency continuous control** — the accelerometer CCs, aftertouch,
+  and flex bend each run through an adaptive (One Euro) low-pass filter that
+  stays rock-steady when the hand is still yet tracks deliberate gestures with
+  little lag; the CCs and aftertouch are interpolated so no value is skipped.
+  Per-input tuning values are defined at the top of `main.cpp` (declared as
+  externs in `FilterConfig.h`). The onboard IMU adds a hardware low-pass (LPF2)
+  ahead of the software filter.																				   
 - **Tap tempo** with sub-menus for key/root transpose, BPM nudge, CC swap, and
   the flex-range editor — works alongside incoming MIDI clock
 - **Tempo-tracking pitch bend** — automatically retunes to the host's clock
@@ -39,7 +46,7 @@ Youtube Demo:
   write (orange→cyan) and recall (green→cyan)
 - **Serial patch backup/restore** — dump every preset to the USB serial console
   and paste them back, each line CRC-checked before it's written to flash
-- **Per-channel and global stuck-note prevention** for reliable BLE-MIDI
+- **Per-channel stuck-note prevention** for reliable BLE-MIDI
 - **Quantization grids** for both finger notes and flex notes (off / 1/8 /
   1/16 / 1/32), locked to internal tempo or external MIDI clock
 
@@ -50,7 +57,7 @@ Youtube Demo:
 | Component       | Where                            | Connection                        |
 |-----------------|----------------------------------|-----------------------------------|
 | MCU             | Wrist                            | Seeed XIAO nRF52840 Sense         |
-| LED strip       | Back of hand                     | 7 × SK681 RGBW on pin 5           |
+| LED strip       | Back of hand                     | 7 × SK6812 RGBW on pin 5           |
 | Multiplexer     | Inline                           | CD74HC4067, S0–S3 on pins 9/8/7/6 |
 | Touch pads      | 16 on the fingers + thumb common | Mux inputs                        |
 | Flex sensor     | Index finger back                | Analog A2                         |
@@ -106,8 +113,8 @@ All declared in `platformio.ini`:
 
 ## Usage
 
-1. Power on. The strip flashes the battery level briefly, then connects via
-   BLE as `Glove`.
+1. Power on. The strip flashes the battery level briefly, then advertises via
+   BLE as `Sneaky Gestures MIDI`.
 2. Pair from your host. The glove appears as a MIDI input.
 3. Play by touching the thumb to a finger pad. The lit knuckle and the colour
    ripple confirm the note.
@@ -158,12 +165,14 @@ are rejected on load.
 
 ├── src/
 │   ├── main.cpp                                firmware entry: input scan, MIDI, BLE, presets
-│   ├── DebugSerial.h                           debug-print macros
+│   ├── GloveState.h                            shared musical/tempo/preset globals (extern)
+│   ├── ScaleQuant.{h,cpp}                      scales, pitch mapping, key/spread, quantize grids
+│   ├── TempoControl.{h,cpp}                    tempo helper (setTempo)
+│   ├── Presets.{h,cpp}                         patch persistence + serial backup/restore console
 │   ├── LedDisplay.{h,cpp}                      LED rendering module
-│   ├── ScaleQuant.{h,cpp}                      Scale quantizing module
-│   ├── GloveState.h                            Glove state header
-│   ├── TempoControl.{h,cpp}                    Tempo control module
-│   ├── Presets.{h,cpp}                         Preset patch handling module
+│   ├── OneEuroFilter.h                         header-only adaptive low-pass filter
+│   ├── FilterConfig.h                          per-input filters (accel / aftertouch / flex)
+│   ├── DebugSerial.h                           debug-print macros
 │   └── TempoPitchShifter.{h,cpp}               inlined pitch-bend math library
 ├── hardware/
 │   ├── README.md                               Bill of Materials
