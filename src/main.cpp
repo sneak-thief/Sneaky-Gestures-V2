@@ -11,12 +11,20 @@
 // INPUTS 0-15
 //   Channels 3-14 : 12 finger-pad note buttons (pinky base=low, index tip=high)
 //   Channel 0     : Octave up   (release) / hold 1s = tap tempo mode
-//   Channel 1     : Octave down (release) / hold 1s = note quantize cycle
+//   Channel 1     : Octave down (release) / hold 1s = preset browser
 //   Channel 2     : Index modal (hold = flex sensor notes + AccelY CC)
 //   Channel 15    : Pinky palm  (tap = spread cycle / hold 1s = scale cycle)
 //   A1            : Thumb FSR   → aftertouch (AFTERTOUCH_DELAY_MS = 30ms after NoteOn)
 //   A2            : Index flex  → quantized notes + LED bar while ch2 held
 //   IMU           : AccelX→CC1 AccelY→CC11, double-tap→battery display
+//
+// CONTINUOUS-CONTROL FILTERING
+//   AccelX/Y CCs, thumb-FSR aftertouch, and the index flex bend each run through
+//   an adaptive One Euro low-pass (OneEuroFilter.h): steady when still, low-lag
+//   on deliberate motion. The CCs and aftertouch are interpolated so no integer
+//   value is skipped. Per-input tuning (min-cutoff / beta) is defined at the top
+//   of this file and declared in FilterConfig.h. The LSM6DS3 also runs a
+//   hardware LPF2 (CTRL8_XL) ahead of the software stage.
 //
 // SCALE QUANTIZATION
 //   20 scales (0=chromatic). Each button maps to a unique scale degree;
@@ -25,9 +33,12 @@
 //   keyTranspose  (±5): raw semitone shift post-quantization (ch3↑/ch6↓)
 //
 // TEMPO & QUANTIZATION
-//   Internal tempo (default 120 BPM) set via tap tempo (8 octave-up presses).
+//   Internal tempo (default 120 BPM) set via tap tempo (hold octave-up then tap 
+//   the tempo with 8 octave-up presses).
 //   External MIDI clock (24 PPQN) overrides internal tempo via EMA.
-//   Note quantization: OFF / 1/16 / 1/32 (cycled by octave-down 1s hold).
+//   Note and flex quantization each: OFF / 1/8 / 1/16 / 1/32, locked to the
+//   active tempo. Both grids are cycled inside the preset browser (octave-down
+//   1s hold): ch12 cycles the note grid, ch9 cycles the flex grid.
 //
 // LED STRIP  7x SK6812 RGBW along knuckles (0=index, 6=pinky)
 //   Priority: orange flash > tap tempo > battery > modal indicators >
@@ -36,6 +47,10 @@
 //                    held at note color, fade note-color→red→black on release.
 //   Per-finger colors: base=blue, middle=cyan, tip=purple.
 //   Modal displays (700ms each): octave, spread, scale, quantize mode.
+//   Refresh is gated to the BLE radio's quiet window (SoftDevice radio
+//   notification → ledRadioBusy()) so a frame never overlaps a radio event;
+//   this keeps the 7.5 ms connection interval glitch-free. D5 is also set to
+//   nRF52 high-drive for data-line margin.
 /*****************************************************************************/
 
 #include "Wire.h"
@@ -50,6 +65,8 @@
 #include <Adafruit_LittleFS.h>      // LittleFS over internal flash
 #include <InternalFileSystem.h>     // nRF52 internal flash filesystem (Adafruit BSP)
 #include "TempoPitchShifter.h"      // tempo->pitch-bend retune helper
+#include "OneEuroFilter.h"          // adaptive low-pass for accelerometer CCs
+#include "FilterConfig.h"           // per-input low-pass tuning globals
 #include "LedDisplay.h"             // LED strip rendering / animation module
 #include "GloveState.h"             // shared musical/tempo/preset globals (extern)
 #include "ScaleQuant.h"             // scales, pitch mapping, key spread, quantize grids
@@ -58,7 +75,6 @@
 using namespace Adafruit_LittleFS_Namespace;
 
 #include "DebugSerial.h"   // DBG_* / BOOT_* logging macros (shared)
-
 
 // - Neopixel Defines -
 #define NEOPIXEL_ENABLED 1            //  Enable/disable Neopixel LED lights
@@ -115,6 +131,8 @@ volatile bool doubleTapBatteryCheckPending = false; // Set by ISR, serviced in l
 // Initiate BLE MIDI
 BLEDis bledis;
 BLEMidi blemidi;
+static uint32_t connParamLogMs = 0;
+
 
 // Create a new instance of the Arduino MIDI Library, and attach BluefruitLE MIDI as the transport.
 MIDI_CREATE_BLE_INSTANCE(blemidi);
@@ -287,6 +305,20 @@ unsigned int lastAccelY;
 // - unsigned int lastAccelZ;             // Z axis - not needed for MIDI CC (yet)
 unsigned long lastExecutionTimeAccel = 0; // Timer for sending IMU MIDI CC's
 const unsigned long intervalAccel = 25;   // Send IMU MIDI CC's every X ms
+
+// Adaptive low-pass (One Euro) filters for the smoothed inputs. The on-chip
+// LSM6DS3 LPF2 removes high-frequency accel noise; these handle the
+// low-frequency hand-tremor band, staying steady when still yet tracking
+// deliberate motion with little lag. Tuning lives in FilterConfig.h (per input)
+// and is applied via setParams() each sample, so each filter is independently
+// adjustable. Defaults below; flex is intentionally milder (lighter smoothing).
+float accelFilterMinCutoff = 1.0f;   float accelFilterBeta = 0.015f;
+float atFilterMinCutoff    = 1.0f;   float atFilterBeta    = 0.015f;
+float flexFilterMinCutoff  = 3.0f;   float flexFilterBeta  = 0.05f; // mild
+OneEuroFilter accelFilterX;   // accel X CC
+OneEuroFilter accelFilterY;   // accel Y CC
+OneEuroFilter atFilter;       // thumb-FSR aftertouch
+OneEuroFilter flexFilter;     // index flex sensor (mild)
 unsigned int CCAccelX = 1;               // Default: Set IMU X axis to MIDI CC 1 (mod wheel)
 unsigned int CCAccelY = 11;                // Default: Set IMU Y axis to MIDI CC 11 (expression)
 // CC mapping swap (toggled by ch4 in the tap-tempo menu). When true, CCAccelX
@@ -315,7 +347,7 @@ int lastFsrVal;                           // track FSR sensor values read from p
 // most LEDs lit), and FLEX_RAW_MAX corresponds to the FULLY EXTENDED
 // position (lowest note, no LEDs lit).
 const int FLEX_RAW_MIN = 85;   // Fully bent
-const int FLEX_RAW_MAX = 190;  // Fully extended
+const int FLEX_RAW_MAX = 165;  // Fully extended
 int minNote = 48;        // MIDI note when fully extended (raw = FLEX_RAW_MAX)
 int maxNote = 84;        // MIDI note when fully bent    (raw = FLEX_RAW_MIN)
 int lastFlexNote = -1;   // Last MIDI note sent via flex (-1 = none active)
@@ -770,6 +802,9 @@ void UpdateIdlePanic()
 // Send channel aftertouch based on current FSR reading, but only for notes that
 // have been held for at least AFTERTOUCH_DELAY_MS, and not more often than
 // AFTERTOUCH_INTERVAL_MS, and only when the value actually changes.
+// Forward declaration: defined later, next to sendCCInterpolated.
+static void sendAfterTouchInterpolated(int target, int &lastVal);
+
 void UpdateAftertouch()
 {
   unsigned long now = millis();
@@ -798,9 +833,14 @@ raw = constrain(raw, 0, FSR_RAW_MAX);
 int at = map(raw, 0, FSR_RAW_MAX, 0, 127);
 at = constrain(at, 0, 127);
 
+// Low-pass the aftertouch (One Euro) so pressure jitter doesn't chatter, then
+// send through every intermediate value so it ramps smoothly without skips.
+atFilter.setParams(atFilterMinCutoff, atFilterBeta);
+at = (int)lroundf(atFilter.filter((float)at, now * 0.001f));
+at = constrain(at, 0, 127);
+
   if (at != lastAftertouchValue) {
-    MIDI.sendAfterTouch((byte)at, MIDIchannel); // Send MIDI channel aftertouch (CAT) from FSR values
-    lastAftertouchValue = at;
+    sendAfterTouchInterpolated(at, lastAftertouchValue); // ramp through all values
     lastAftertouchSendTime = now;
     // DBG_PRINT("AT=");
     // DBG_PRINTLN(at);
@@ -828,6 +868,150 @@ void midiRead()
 }
 
 // Initialize BLE
+
+
+
+// --- BLE connection status logging (gated by DEBUG_SERIAL_BLE) ---------------
+#if DEBUG_SERIAL_BLE
+// Decodes the HCI disconnect reason byte the SoftDevice reports. The common
+// ones when a link drops on its own (rather than a clean unpair) are
+// 0x08 (supervision timeout = the radios lost each other: RF interference,
+// range, or too-short a supervision timeout) and 0x3E (failed to establish).
+static const char *bleDisconnectReasonStr(uint8_t reason)
+{
+  switch (reason) {
+    case 0x08: return "supervision timeout (link lost: RF/interference/range)";
+    case 0x13: return "remote user terminated";
+    case 0x14: return "remote terminated (low resources)";
+    case 0x15: return "remote terminated (power off)";
+    case 0x16: return "local host terminated";
+    case 0x22: return "LMP/LL response timeout";
+    case 0x28: return "instant passed";
+    case 0x29: return "pairing with unit key unsupported";
+    case 0x3B: return "unacceptable connection parameters";
+    case 0x3D: return "MIC failure (encryption)";
+    case 0x3E: return "failed to establish connection";
+    default:   return "other/unknown";
+  }
+}
+
+// Fires on RSSI change once monitorRssi() is started in the connect callback.
+// Useful here because the host is only ~20 cm away: a healthy short-range link
+// should sit roughly in the -40..-60 dBm range; values drifting toward -80/-90
+// before a drop point at an RF/antenna problem rather than a protocol one.
+static void ble_rssi_callback(uint16_t conn_hdl, int8_t rssi)
+{
+  (void)conn_hdl;
+  BLE_PRINT("[BLE] RSSI ");
+  BLE_PRINT(rssi);
+  BLE_PRINTLN(" dBm");
+}
+#endif
+
+// ---------------------------------------------------------------------------
+// Radio-event-anchored LED gate.
+//
+// The SK6812 strip glitches when an LED frame (strip.show(), ~360 us, interrupts
+// not maskable against the SoftDevice) overlaps a BLE radio event. MIDI timing
+// is critical (we keep the 7.5 ms interval); LED timing is not. So instead of
+// raising the interval, we hold off LED frames during the radio-active window
+// and only push them while the radio is inactive.
+//
+// The SoftDevice's Radio Notification raises SWI1 a fixed "distance" (~800 us)
+// before the radio becomes active. We timestamp that, and ledRadioBusy() reports
+// busy for a window long enough to cover the whole radio event, so the gated
+// callers (the loop-level UpdateFingerLeds() call, and UpdateFingerLeds() itself
+// right before strip.show()) won't start an LED transmission on top of it.
+// ---------------------------------------------------------------------------
+volatile uint32_t ledRadioActiveUs = 0;     // micros() when the radio notification fired
+
+// How long to hold the LED gate closed after each radio-active notification.
+// The notification fires ~800 us BEFORE the radio goes active; the event itself
+// then runs for up to a few ms (longer in flex mode, where continuous flex
+// notes + interpolated aftertouch pack each connection event with packets). This
+// window must comfortably cover (distance + worst-case event) so show() never
+// lands on a live event. Erring long is free -- LED timing is non-critical, and
+// at a 7.5 ms interval a 4 ms window still leaves ~3.5 ms of quiet time per
+// interval, far more than the ~360 us a frame needs. Raise it if flex still
+// glitches; lower it if the LEDs feel laggy.
+static const uint32_t LED_RADIO_WINDOW_US = 4000;
+
+// SWI1 = radio notification interrupt (configured INT_ON_ACTIVE, so it fires
+// once per radio event, ~800 us before the radio goes active). We don't toggle
+// (that desyncs if an edge is missed) -- we just timestamp, and ledRadioBusy()
+// keeps the gate closed for LED_RADIO_WINDOW_US. Keep this ISR tiny.
+extern "C" void SWI1_IRQHandler(void)
+{
+  ledRadioActiveUs = micros();
+}
+
+// True while we're inside the post-notification window, i.e. a radio event is
+// imminent or in progress -- do NOT start an LED transmission. Self-clears after
+// LED_RADIO_WINDOW_US, so the gate can never lock the LEDs up.
+bool ledRadioBusy()
+{
+  return (micros() - ledRadioActiveUs) < LED_RADIO_WINDOW_US;
+}
+
+// Enable radio notifications with a guard window before/after each radio event.
+// NRF_RADIO_NOTIFICATION_DISTANCE_800US gives ~800 us of warning, comfortably
+// longer than a ~360 us LED frame so a frame started right after an "inactive"
+// notification finishes before the next "active" one. Priority must be one of
+// the nRF52 user-allowed levels (2,3,6,7); 6 matches the BSP's SWI handlers.
+static void setupLedRadioGate()
+{
+  NVIC_SetPriority(SWI1_IRQn, 6);
+  NVIC_ClearPendingIRQ(SWI1_IRQn);
+  NVIC_EnableIRQ(SWI1_IRQn);
+  sd_radio_notification_cfg_set(NRF_RADIO_NOTIFICATION_TYPE_INT_ON_ACTIVE,
+                                NRF_RADIO_NOTIFICATION_DISTANCE_800US);
+}
+
+static void ble_connect_callback(uint16_t conn_handle)
+{
+					
+  BLEConnection *conn = Bluefruit.Connection(conn_handle);
+
+  // Actively request a faster connection interval AFTER connecting. Unlike
+  // setConnInterval() (which only sets the passive PPCP hint the central may
+  // ignore), this sends a Connection Parameter Update Request. The central
+  // still has the final say and may refuse -- some laptop BLE stacks pin the
+  // interval and won't budge -- but this is the most a peripheral can do.
+  //   args: conn_interval (1.25 ms units), slave_latency, sup_timeout (10 ms units)
+  if (conn) conn->requestConnectionParameter(6, 0, 400); // 7.5 ms, no latency, 4 s
+  connParamLogMs = millis() + 2000;   // re-read 2 s after connect
+#if DEBUG_SERIAL_BLE
+  char peer[32] = {0};
+  if (conn) conn->getPeerName(peer, sizeof(peer));
+  uint16_t ci = conn ? conn->getConnectionInterval() : 0; // units of 1.25 ms
+
+  BLE_PRINT("[BLE] CONNECTED handle=");
+  BLE_PRINT(conn_handle);
+  BLE_PRINT(" peer='");
+  BLE_PRINT(peer);
+  BLE_PRINT("' interval=");
+  BLE_PRINT(ci);
+  BLE_PRINT(" (");
+  BLE_PRINT(ci * 1.25f);
+  BLE_PRINTLN(" ms) -- requested 7.5 ms; watch for a CONN_PARAM update");
+
+  // Start RSSI monitoring so link quality is visible while connected.
+  if (conn) conn->monitorRssi();
+	 
+					
+#endif
+}
+
+static void ble_disconnect_callback(uint16_t conn_handle, uint8_t reason)
+{
+  (void)conn_handle;
+  BLE_PRINT("[BLE] DISCONNECTED reason=0x");
+  BLE_PRINT(reason, HEX);
+  BLE_PRINT(" (");
+  BLE_PRINT(bleDisconnectReasonStr(reason));
+  BLE_PRINTLN(")");
+}
+
 void startAdv(void)
 {
 
@@ -1005,6 +1189,45 @@ void UpdateTempoBend()
 // -----------------------------------------------------------------------------
 // Read accelerometer and send MIDI CC's accordingly
 // -----------------------------------------------------------------------------
+
+// Emit a CC, stepping through EVERY intermediate integer from lastVal to target
+// so a fast move never skips values -- the receiver sees a continuous ramp, not
+// a jump. The One Euro filter bounds how far the value moves per call, so these
+// bursts are small; at the BLE-MIDI interval they arrive effectively instantly,
+// adding no overt lag. When `send` is false (e.g. AccelY while the index modal
+// isn't held) no MIDI is emitted, but lastVal still tracks the target so
+// re-engaging doesn't dump a jump.
+static void sendCCInterpolated(uint8_t cc, int target, unsigned int &lastVal, bool send)
+{
+  int cur = (int)lastVal;
+  if (target == cur) return;
+  if (!send) { lastVal = (unsigned int)target; return; }
+
+  int step = (target > cur) ? 1 : -1;
+  while (cur != target) {
+    cur += step;
+    MIDI.sendControlChange(cc, (uint8_t)cur, MIDIchannel);
+  }
+  lastVal = (unsigned int)target;
+}
+
+// Same idea as sendCCInterpolated, but for channel aftertouch (sendAfterTouch),
+// stepping through every intermediate value so a fast pressure change ramps
+// smoothly instead of jumping. lastVal is an int so it can hold -1 (no value
+// sent yet); the first real value seeds without bursting from -1.
+static void sendAfterTouchInterpolated(int target, int &lastVal)
+{
+  if (target == lastVal) return;
+  int cur = (lastVal < 0) ? target : lastVal; // first send: no ramp from -1
+  if (cur == target) { MIDI.sendAfterTouch((byte)target, MIDIchannel); lastVal = target; return; }
+  int step = (target > cur) ? 1 : -1;
+  while (cur != target) {
+    cur += step;
+    MIDI.sendAfterTouch((byte)cur, MIDIchannel);
+  }
+  lastVal = target;
+}
+
   void accelRead()
 {
 
@@ -1015,39 +1238,39 @@ void UpdateTempoBend()
       constrain((myIMU.readFloatAccelX()), -8, 8) + 8; // Reverse X and Y because of IMU orientation on hand
   // rawAccelZ = constrain((myIMU.readFloatAccelZ()),-8,8) + 8; // Z axis not needed for MIDI CC for now
 
+  float tSec = millis() * 0.001f; // timestamp for the adaptive filter
+  accelFilterX.setParams(accelFilterMinCutoff, accelFilterBeta);
+  accelFilterY.setParams(accelFilterMinCutoff, accelFilterBeta);
 
+  // Map to a CONTINUOUS 0..127 value (no rounding yet), then low-pass it with
+  // the One Euro filter so jitter is smoothed while deliberate motion tracks.
+  float xCC = constrain(rawAccelX * 8.0f, 0.0f, 127.0f);
+  xCC = 127.0f - xCC; // reversed direction
+  xCC = accelFilterX.filter(xCC, tSec);
+  AccelX = (unsigned int)constrain((long)lroundf(xCC), 0, 127);
 
-  AccelX = labs(constrain(round((rawAccelX) * 8), 0, 127));
-  AccelX = 127 - AccelX; // reversed direction
-  AccelY = labs(constrain(round((rawAccelY) * 8), 0, 127));
-  // Bottom deadzone for Y: the lowest 25% of travel holds at 0, then the
-  // remaining 75% rescales linearly to the full 0..127 range.
-  //   raw 0..31  -> 0
-  //   raw 32..127 -> 0..127
+  float yCC = constrain(rawAccelY * 8.0f, 0.0f, 127.0f);
+  yCC = accelFilterY.filter(yCC, tSec);
+
+  // Bottom deadzone for Y, applied to the SMOOTHED value: the lowest 25% of
+  // travel holds at 0, then the remaining 75% rescales linearly to 0..127.
   const int ACCELY_DEADZONE = 32; // 25% of 127 ~= 32
-  if ((int)AccelY <= ACCELY_DEADZONE) {
+  int yi = (int)lroundf(yCC);
+  if (yi <= ACCELY_DEADZONE) {
     AccelY = 0;
   } else {
     AccelY = (unsigned int)constrain(
-        round(((int)AccelY - ACCELY_DEADZONE) * 127.0f / (127 - ACCELY_DEADZONE)),
+        lroundf((yi - ACCELY_DEADZONE) * 127.0f / (127 - ACCELY_DEADZONE)),
         0, 127);
   }
 
   // AccelZ = labs(constrain(round((rawAccelZ) * 8),0,127)); // AccelZ not used for now 
 
-  // AccelX is sent at all times whenever its value changes.
-  if (AccelX != lastAccelX) {
-    MIDI.sendControlChange(CCAccelX, AccelX, MIDIchannel);
-    lastAccelX = AccelX;
-  }
-
-  if (AccelY != lastAccelY) {
-    // AccelY is sent ONLY while the index modal contact (channel 2) is held.
-    if (indexHeld) {
-      MIDI.sendControlChange(CCAccelY, AccelY, MIDIchannel);
-    }
-    lastAccelY = AccelY;
-  }
+  // Send the CCs, stepping through every intermediate value so nothing is
+  // skipped. AccelX is always sent; AccelY only while the index modal (channel
+  // 2) is held, but its lastVal still tracks so re-engaging doesn't jump.
+  sendCCInterpolated(CCAccelX, (int)AccelX, lastAccelX, true);
+  sendCCInterpolated(CCAccelY, (int)AccelY, lastAccelY, indexHeld);
 }
 
 // -----------------------------------------------------------------------------
@@ -1066,6 +1289,12 @@ void FlexNoteUpdate()
   lastFlexSampleMs = now;
 
   int raw = analogRead(indexFLEX);
+
+  // Mild low-pass on the raw bend so the selected note doesn't chatter between
+  // adjacent scale steps at a boundary. Kept light (see flexFilter* in
+  // FilterConfig.h) so deliberate bends still track promptly.
+  flexFilter.setParams(flexFilterMinCutoff, flexFilterBeta);
+  raw = (int)lroundf(flexFilter.filter((float)raw, now * 0.001f));
 
   // Periodic raw value print for calibration. Comment out once calibrated.
   // Adjust FLEX_RAW_MIN / FLEX_RAW_MAX above so the printed range when you
@@ -1542,7 +1771,7 @@ void debounceButton(int channel)
         octaveDownHoldFired = false;
       } else if ((buttonState == HIGH) && (channel == 1)) {
         if (octaveDownHoldFired) {
-          // Hold already cycled the quantize mode; do not apply octave change.
+          // Hold already opened the preset browser; do not apply octave change.
           octaveDownHoldFired = false;
         } else {
           // Quick tap: apply octave down if no notes and no index/flex held.
@@ -1771,7 +2000,7 @@ void setLED_REDGB(bool red, bool green, bool blue)
 void int1ISR()
 {
   DoubleTapState = !DoubleTapState;
-  setLED_REDGB(false, DoubleTapState, false); // set green only
+  // setLED_REDGB(false, DoubleTapState, false); // set green only
   doubleTapBatteryCheckPending = true;
   // No Serial here -- this is an ISR; blocking USB-CDC I/O is unsafe.
 }
@@ -1838,6 +2067,30 @@ void setup()
   Bluefruit.setName("Sneaky Gestures MIDI");
   Bluefruit.setTxPower(8);
 
+  // Request a faster connection interval for lower MIDI latency. Units are
+  // 1.25 ms, so (6, 12) asks for 7.5-15 ms: the central (laptop) may grant the
+  // 7.5 ms floor but can still settle at 15 ms. This is only a *preference* --
+  // the central has final say. A wider supervision timeout (units of 10 ms;
+  // 600 = 6 s) lets the link ride out brief RF glitches before it's declared
+  // dead, which can reduce spurious dropouts at the cost of slower detection of
+  // a genuine disconnect.
+  Bluefruit.Periph.setConnInterval(6,6);          // 7.5 ms .. 15 ms
+  Bluefruit.Periph.setConnSupervisionTimeout(600);  // 4.0 s
+
+  // Register connection-status callbacks so disconnects are logged with their
+  // HCI reason code (gated by DEBUG_SERIAL_BLE). Helps tell an RF/link-loss
+  // drop (supervision timeout) apart from a host-initiated or param-negotiation
+  // disconnect when chasing intermittent dropouts.
+  Bluefruit.Periph.setConnectCallback(ble_connect_callback);
+  Bluefruit.Periph.setDisconnectCallback(ble_disconnect_callback);
+
+  // Anchor LED frames to the radio's quiet window (see setupLedRadioGate).
+  setupLedRadioGate();
+#if DEBUG_SERIAL_BLE
+  Bluefruit.setRssiCallback(ble_rssi_callback);
+#endif
+
+
   // Setup the on board blue LED to be enabled on CONNECT
   Bluefruit.autoConnLed(true);
 
@@ -1899,6 +2152,24 @@ void setup()
 
   // Setup IMU Double Tap Interrupt
   setupDoubleTapInterrupt();
+
+  // Enable the accelerometer's on-chip digital LPF2 low-pass filter to strip
+  // high-frequency sensor/ADC noise BEFORE we read it. This is the hardware
+  // front end; the One Euro software filter on the CC values (accelRead) then
+  // handles the low-frequency hand-tremor band adaptively.
+  //
+  // CTRL8_XL (0x17): bit7 LPF2_XL_EN, bits6:5 HPCF_XL[1:0], bit2 HP_SLOPE_XL_EN.
+  // With LPF2 enabled and HP_SLOPE=0 (low-pass), HPCF_XL selects the cutoff as a
+  // fraction of ODR. NOTE: setupDoubleTapInterrupt() above sets CTRL1_XL=0x60,
+  // so the effective accel ODR is 416 Hz. Cutoff options at 416 Hz:
+  //   0x80 = ODR/50  ~= 8.3 Hz  (lightest useful)
+  //   0xA0 = ODR/100 ~= 4.2 Hz  (balanced -- default)
+  //   0xE0 = ODR/400 ~= 1.0 Hz  (heaviest; will soften fast gestures)
+  // Keep this light so it only removes noise above the gesture band and leaves
+  // the deliberate-motion shaping to the One Euro filter. (CTRL8_XL must be
+  // written AFTER setupDoubleTapInterrupt so it isn't affected by its writes.)
+  myIMU.writeRegister(0x17, 0xA0); // LPF2_XL_EN | HPCF_XL=ODR/100 (~4.2 Hz @ 416 Hz ODR)
+
   pinMode(int1Pin, INPUT);
   attachInterrupt(digitalPinToInterrupt(int1Pin), int1ISR, RISING);
 
@@ -1909,6 +2180,26 @@ void setup()
   strip.begin();
   applyStripBrightness(brightnessLevel);
   strip.show(); // turn OFF all pixels
+
+  // Signal-integrity margin for the SK6812 data line. Driving a 5 V SK6812 from
+  // a 3.3 V GPIO leaves the logic-high (3.3 V) only marginally above the part's
+  // VIH (~0.7*VDD), so BLE-radio switching noise can dip individual bits under
+  // threshold -> a flashed wrong pixel. Putting D5 into the nRF52 HIGH-DRIVE
+  // mode (H0H1) sharpens the edges and sources/sinks more current, widening that
+  // margin. Set after strip.begin() (which configures the pin) so it sticks.
+  // NOTE: the definitive fix is hardware (a 3.3->5 V level shifter, or a
+  // ~330 ohm series resistor + bulk cap at the strip); this is the firmware-side
+  // mitigation. Define LED_LOWDRIVE to disable if it ever worsens ringing.
+#if defined(LED_PIN) && !defined(LED_LOWDRIVE)
+  {
+    uint32_t nrfPin = g_ADigitalPinMap[LED_PIN];     // absolute nRF GPIO number
+    NRF_GPIO_Type *gport = (nrfPin < 32) ? NRF_P0 : NRF_P1;
+    uint32_t pidx = nrfPin & 0x1F;
+    gport->PIN_CNF[pidx] =
+        (gport->PIN_CNF[pidx] & ~GPIO_PIN_CNF_DRIVE_Msk) |
+        (GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos);
+  }
+#endif
 
   // Initialize battery monitor and arm the 2 s non-blocking boot indicator.
   // The strip will display capacity bar / charging state for BATTERY_DISPLAY_MS,
@@ -1983,7 +2274,18 @@ void loop()
   // Drive the LED strip BEFORE the BLE connection gates below, so the battery
   // boot indicator and other animations render even when no MIDI host is
   // connected. The function self-throttles internally (~60 Hz).
-  UpdateFingerLeds();
+  //
+  // Radio-anchored gate: skip an LED frame while a radio event is imminent/in
+  // progress, so the ~360 us strip.show() doesn't overlap it (see ledRadioBusy).
+  // Before any host connects, no notifications fire and the window has long since
+  // elapsed, so this is a no-op (LEDs always update). Skipped frames are
+  // invisible -- a quiet window comes within a few ms and UpdateFingerLeds()
+  // self-throttles. The gate is re-checked inside UpdateFingerLeds() right before
+  // show(), which is what actually fixes flex mode (heavy per-frame work).
+  bool radioBusy = ledRadioBusy();
+  if (!radioBusy) {
+    UpdateFingerLeds();
+  }
 #endif
 
   // Handle an incoming MIDI Program Change (flagged by handleProgramChange in
@@ -2017,6 +2319,19 @@ void loop()
   // Placed ABOVE the BLE-connection gates so backup and restore work over USB
   // even when no MIDI host is connected.
   serviceSerialConsole();
+
+if (connParamLogMs && millis() >= connParamLogMs) {
+  connParamLogMs = 0;
+  BLEConnection *c = Bluefruit.Connection(0);
+  if (c && c->connected()) {
+    uint16_t ci = c->getConnectionInterval();
+    BLE_PRINT("[BLE] interval now ");
+    BLE_PRINT(ci);
+    BLE_PRINT(" (");
+    BLE_PRINT(ci * 1.25f);
+    BLE_PRINTLN(" ms)");
+  }
+}
 
   // Don't continue if we aren't connected.
   if (!Bluefruit.connected()) {
@@ -2115,6 +2430,6 @@ void loop()
   // Re-send any dropped NoteOff (BLE stuck-note prevention).
   UpdateNoteOffRetries();
 
-  // Idle All-Notes-Off safeguard (once/sec when nothing is sounding) - DISABLED FOR NOW 
+  // Idle All-Notes-Off safeguard (once/sec when nothing is sounding).
   // UpdateIdlePanic();
 }
