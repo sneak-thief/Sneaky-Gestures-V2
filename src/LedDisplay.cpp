@@ -5,8 +5,8 @@
 // LED display handler / animation module
 //
 // ---------------------------------------------------------------------------
-
 #include "LedDisplay.h"
+
 #include <Arduino.h>
 #include <math.h>
 #include <light_CD74HC4067.h>
@@ -24,6 +24,10 @@ static inline void clampDataPinLow();
 // External state owned by main.cpp that the LED module reads. These mirror the
 // definitions in main.cpp; keep them in sync if the originals change.
 // ---------------------------------------------------------------------------
+
+// Radio gate accessor (defined in main.cpp): true while a BLE radio event is
+// in/entering its window, so we must not start an LED transmission.
+extern bool ledRadioBusy();
 
 // Hardware objects
 extern Adafruit_NeoPixel strip;
@@ -406,9 +410,9 @@ static void renderSpreadDisplay(uint8_t out[7][3])
 // -----------------------------------------------------------------------------
 // Scale display: number of lit LEDs grows with scale value, color depends on
 // the band the scale falls into:
-//   scales 0..6  : pink   (255, 80, 180), 1..7 LEDs lit starting from LED 6
-//   scales 7..13 : yellow (255, 255, 0),  1..7 LEDs lit starting from LED 6
-//   scales 14..19: orange (255,  80, 0),  1..6 LEDs lit starting from LED 6
+//   scales 0..6  : red    (255,   0,   0), 1..7 LEDs lit starting from LED 6
+//   scales 7..13 : yellow (255, 255,   0), 1..7 LEDs lit starting from LED 6
+//   scales 14..19: blue   (  0,   0, 255), 1..6 LEDs lit starting from LED 6
 // -----------------------------------------------------------------------------
 
 void TriggerScaleDisplay()
@@ -627,11 +631,24 @@ static void renderFlexBarDisplay(uint8_t outRgb[7][3], uint8_t outW[7])
     {255,   0,   0}  // LED 6 - red
   };
 
-  // Total bar "budget" across the 7 LEDs.
-  float budget = flexBarBend * 7.0f;
-  if (budget < 0.0f) budget = 0.0f;
-  if (budget > 7.0f) budget = 7.0f;
+  // Map the bend onto the 7-LED bar. LED 0 (orange) is the always-on FLOOR: at
+  // full extension only LED 0 lights, and LEDs 1..6 fill progressively as the
+  // finger bends, reaching all 7 when fully bent. A small bottom deadzone
+  // absorbs the residual bend the sensor still reports at full extension (its
+  // fully-extended reading can sit a little inside FLEX_RAW_MAX), so the bar
+  // reliably rests on LED 0 alone there instead of spilling onto LED 1.
+  //   - If LED 1 still creeps on at full extension, raise FLEX_BAR_DEADZONE.
+  //   - The cleaner fix is to calibrate FLEX_RAW_MAX (use the "flex raw=" print
+  //     in FlexNoteUpdate) so full extension reads ~0 bend; then this deadzone
+  //     can be small.
 
+  const float FLEX_BAR_DEADZONE = 0.20f;
+  float b = (flexBarBend - FLEX_BAR_DEADZONE) / (1.0f - FLEX_BAR_DEADZONE);
+  if (b < 0.0f) b = 0.0f;
+  if (b > 1.0f) b = 1.0f;
+  float budget = 1.0f + b * 6.0f; // LED 0 floor; remaining travel over LEDs 1..6
+
+  if (budget > 7.0f) budget = 7.0f;
   // Compute current pulse W (decays over FLEX_PULSE_MS).
   uint8_t pulseW = 0;
   if (flexPulseBaseW > 0.0f) {
@@ -1663,16 +1680,25 @@ void UpdateFingerLeds()
     return;
   }
 
-  // Push pixels. Library-level brightness scaling (set via strip.setBrightness)
-  // is applied internally by Adafruit_NeoPixel. The W channel is normally 0;
-  // the flex bar branch uses it for the note-trigger pulse.
+  // Fill the NeoPixel buffer (cheap; this only writes RAM, it does not transmit).
+  // Library-level brightness scaling (set via strip.setBrightness) is applied
+  // internally by Adafruit_NeoPixel. The W channel is normally 0; the flex bar
+  // branch uses it for the note-trigger pulse.
   for (int i = 0; i < 7; i++) {
     strip.setPixelColor(i, strip.Color(curPix[i][0], curPix[i][1], curPix[i][2], curPixW[i]));
-    prevPix[i][0] = curPix[i][0];
-    prevPix[i][1] = curPix[i][1];
-    prevPix[i][2] = curPix[i][2];
-    prevPixW[i] = curPixW[i];
   }
+
+  // Radio gate, re-checked at the LAST possible instant before transmitting.
+  // The per-frame computation above is heavy in flex mode (continuous bar +
+  // pulse decay), long enough that the radio window can open between the
+  // loop-level gate and here -- which is why flex mode glitched while note mode
+  // didn't. If the radio is busy now, defer: skip the push and DON'T mark
+  // prevPix, so `changed` stays set and we retry on the next frame. (LED timing
+  // is non-critical; a dropped frame is invisible.)
+  if (ledRadioBusy()) {
+    return;
+  }
+
   strip.show();
   // Drive the data pin LOW after show() finishes. Adafruit_NeoPixel on nRF52840
   // disconnects the PWM peripheral from the pin after DMA completes, which
@@ -1681,6 +1707,14 @@ void UpdateFingerLeds()
   // spurious data bits, latching wrong colors into individual LEDs. Holding
   // the line LOW between refreshes prevents that.
   clampDataPinLow();
+
+  // Mark pixels pushed only after a real show(), so a deferred frame retries.
+  for (int i = 0; i < 7; i++) {
+    prevPix[i][0] = curPix[i][0];
+    prevPix[i][1] = curPix[i][1];
+    prevPix[i][2] = curPix[i][2];
+    prevPixW[i] = curPixW[i];
+  }
   lastFrameWasBlack = !anyNonZero;
 }
 
