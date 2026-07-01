@@ -153,6 +153,18 @@ unsigned int harmonizedNote;
 unsigned int Scale = 0; // Musical scale index (0 = no quantization, 1-19 = named scales)
 const int FSR_AFTERTOUCH_THRESHOLD = 50; // raw ADC counts; below this = treat as no pressure
 
+// Enable/disable accelerometer CC interpolation. When 1, sendCCInterpolated()
+// walks through every intermediate value between the last and target CC so the
+// stream ramps smoothly with no skipped values. When 0, it sends the target
+// value directly (one message per update) -- lower MIDI traffic, but stepwise.
+#define CC_INTERPOLATION 1
+
+// Enable/disable thumb-FSR aftertouch interpolation for smoother respose. When
+// 1, sendAfterTouchInterpolated() ramps through intermediate values (adaptive
+// stride). When 0, it sends the target aftertouch value directly (one message
+// per update) -- lower MIDI traffic, but stepwise.
+#define AT_INTERPOLATION 0
+
 // Octave shift. octave indexes into OCTAVE_OFFSETS[]; default 3 = centered (no shift).
 // octave 0 -> -36 semitones (3 octaves down)
 // octave 1 -> -24
@@ -416,6 +428,16 @@ const int FSR_RAW_MAX = 550;                     // Max expected raw ADC value f
 const unsigned long AFTERTOUCH_DELAY_MS = 30;   // Wait this long after NoteOn before sending aftertouch
 const unsigned long AFTERTOUCH_INTERVAL_MS = 20; // Min interval between aftertouch updates
 
+// Aftertouch interpolation message budget per AFTERTOUCH_INTERVAL_MS tick. The
+// interpolator walks toward the target with a STRIDE that scales with the jump:
+// small changes step by 1 (every value, smoothest), while a large jump -- e.g. a
+// full 127->0 release when the thumb lifts off the FSR -- skips every 2nd / 3rd /
+// Nth value so the whole jump resolves in ONE tick using at most this many MIDI
+// messages. That keeps the release fast yet never dumps the 100+ messages that
+// would stall the BLE stack. Raise for smoother big jumps (more messages), lower
+																			
+// if the BLE stack ever hiccups.
+const int AT_MAX_MSGS_PER_TICK = 4; // reduced 75% from 16 (coarser AT interpolation)
 // Per-note aftertouch tracking. A note is "active" while its contact is held.
 // noteOnTime[ch] = millis() of the NoteOn for channel ch (used to gate the 50 ms delay).
 unsigned long noteOnTime[16] = {0};
@@ -803,7 +825,7 @@ void UpdateIdlePanic()
 // have been held for at least AFTERTOUCH_DELAY_MS, and not more often than
 // AFTERTOUCH_INTERVAL_MS, and only when the value actually changes.
 // Forward declaration: defined later, next to sendCCInterpolated.
-static void sendAfterTouchInterpolated(int target, int &lastVal);
+static void sendAfterTouchInterpolated(int target, int &lastVal, int maxMsgs);
 
 void UpdateAftertouch()
 {
@@ -840,7 +862,7 @@ at = (int)lroundf(atFilter.filter((float)at, now * 0.001f));
 at = constrain(at, 0, 127);
 
   if (at != lastAftertouchValue) {
-    sendAfterTouchInterpolated(at, lastAftertouchValue); // ramp through all values
+    sendAfterTouchInterpolated(at, lastAftertouchValue, AT_MAX_MSGS_PER_TICK); // adaptive-stride ramp
     lastAftertouchSendTime = now;
     // DBG_PRINT("AT=");
     // DBG_PRINTLN(at);
@@ -1203,11 +1225,15 @@ static void sendCCInterpolated(uint8_t cc, int target, unsigned int &lastVal, bo
   if (target == cur) return;
   if (!send) { lastVal = (unsigned int)target; return; }
 
+#if CC_INTERPOLATION
   int step = (target > cur) ? 1 : -1;
   while (cur != target) {
     cur += step;
     MIDI.sendControlChange(cc, (uint8_t)cur, MIDIchannel);
   }
+#else
+  MIDI.sendControlChange(cc, (uint8_t)target, MIDIchannel); // direct, no interpolation
+#endif
   lastVal = (unsigned int)target;
 }
 
@@ -1215,17 +1241,34 @@ static void sendCCInterpolated(uint8_t cc, int target, unsigned int &lastVal, bo
 // stepping through every intermediate value so a fast pressure change ramps
 // smoothly instead of jumping. lastVal is an int so it can hold -1 (no value
 // sent yet); the first real value seeds without bursting from -1.
-static void sendAfterTouchInterpolated(int target, int &lastVal)
+static void sendAfterTouchInterpolated(int target, int &lastVal, int maxMsgs)
 {
   if (target == lastVal) return;
   int cur = (lastVal < 0) ? target : lastVal; // first send: no ramp from -1
   if (cur == target) { MIDI.sendAfterTouch((byte)target, MIDIchannel); lastVal = target; return; }
-  int step = (target > cur) ? 1 : -1;
+
+#if !AT_INTERPOLATION
+  MIDI.sendAfterTouch((byte)target, MIDIchannel); // direct, no interpolation
+  lastVal = target;
+#else
+  int dir  = (target > cur) ? 1 : -1;
+  int dist = (target > cur) ? (target - cur) : (cur - target);
+
+  // Stride scales with the jump: stride = ceil(dist / maxMsgs). Small changes
+  // (dist <= maxMsgs) step by 1 and send every value; large jumps skip every
+  // 2nd / 3rd / Nth value so the whole jump lands in this one call within the
+  // maxMsgs budget -- fast, smooth-enough, and never a BLE-flooding burst.
+  int stride = (dist + maxMsgs - 1) / maxMsgs; // ceil
+  if (stride < 1) stride = 1;
+
   while (cur != target) {
-    cur += step;
+    int next = cur + dir * stride;
+    if ((dir > 0 && next > target) || (dir < 0 && next < target)) next = target; // land exactly
+    cur = next;
     MIDI.sendAfterTouch((byte)cur, MIDIchannel);
   }
   lastVal = target;
+#endif
 }
 
   void accelRead()
